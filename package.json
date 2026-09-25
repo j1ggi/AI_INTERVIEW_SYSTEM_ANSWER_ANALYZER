@@ -1,0 +1,27 @@
+{
+  "name": "mockvue-root",
+  "version": "1.0.0",
+  "description": "MockVue — AI-Powered Mock Interview & Evaluation Platform",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install && npm install --prefix server && npm install --prefix client",
+    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"cyan,magenta\" \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "dev:server": "npm run dev --prefix server",
+    "dev:client": "npm run dev --prefix client",
+    "build:client": "npm run build --prefix client",
+    "start:server": "npm run start --prefix server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "keywords": [
+    "mock-interview",
+    "ai-evaluation",
+    "edtech",
+    "full-stack",
+    "react",
+    "express"
+  ],
+  "author": "MockVue Team",
+  "license": "MIT"
+}
