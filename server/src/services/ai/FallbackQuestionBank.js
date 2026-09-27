@@ -168,7 +168,36 @@ export const FALLBACK_QUESTION_BANK = [
   // --- Object-Oriented Programming ---
   {
     topic: 'Object-Oriented Programming',
+    difficulty: 'Easy',
+    type: 'Technical',
+    questionText: 'What is inheritance in OOP? Explain how it promotes code reusability and how parent and child classes interact.',
+    referenceConcepts: [
+      'Subclassing and code reuse (extends keyword)',
+      'Parent (base) and child (derived) class relationship',
+      'Method overriding and polymorphism',
+      'Access modifiers (public, protected, private)',
+    ],
+    evaluationCriteria: [
+      'Explains that child class acquires properties and methods from parent class',
+      'Mentions code reusability and avoiding duplication',
+      'Explains IS-A relationship or provides a clear example',
+    ],
+  },
+  {
+    topic: 'Object-Oriented Programming',
     difficulty: 'Medium',
+    type: 'Technical',
+    questionText: 'Explain the difference between compile-time polymorphism (method overloading) and runtime polymorphism (method overriding) in OOP.',
+    referenceConcepts: ['Method Overloading (static binding)', 'Method Overriding (dynamic dispatch)', 'Virtual method table (vtable)', 'Same signature vs different arguments'],
+    evaluationCriteria: [
+      'Contrasts compile-time with runtime binding',
+      'Details how method overriding allows subclasses to provide specific implementations',
+      'Discusses practical design patterns utilizing dynamic polymorphism',
+    ],
+  },
+  {
+    topic: 'Object-Oriented Programming',
+    difficulty: 'Hard',
     type: 'Technical',
     questionText: 'Explain the SOLID design principles in software engineering with a real-world architectural example for Open-Closed Principle and Dependency Inversion.',
     referenceConcepts: ['Single Responsibility', 'Open-Closed (polymorphism)', 'Liskov Substitution', 'Interface Segregation', 'Dependency Inversion (DI/IoC)'],

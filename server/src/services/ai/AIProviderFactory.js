@@ -78,6 +78,32 @@ class AIServiceManager {
 
     return await this.fallbackProvider.evaluateAnswer(data);
   }
+
+  /**
+   * Resilient speech-to-text audio transcription.
+   */
+  async transcribeAudio(data) {
+    if (this.primaryProvider && this.primaryProvider !== this.fallbackProvider && typeof this.primaryProvider.transcribeAudio === 'function') {
+      try {
+        console.log(`[AI] Dispatching audio transcription to: ${this.primaryProvider.name}`);
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Audio transcription timed out after 20s')), 20000)
+        );
+
+        const result = await Promise.race([
+          this.primaryProvider.transcribeAudio(data),
+          timeoutPromise,
+        ]);
+
+        return result;
+      } catch (err) {
+        console.warn(`[AI WARN] Primary transcription (${this.primaryProvider.name}) failed: ${err.message}.`);
+      }
+    }
+
+    return await this.fallbackProvider.transcribeAudio(data);
+  }
 }
 
 export const aiService = new AIServiceManager();

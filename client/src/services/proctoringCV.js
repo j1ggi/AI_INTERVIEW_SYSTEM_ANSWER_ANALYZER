@@ -1,198 +1,378 @@
 /**
- * MockVue Advanced Computer Vision & Audio Proctoring Engine
- * 
- * Features:
- * - Robust Anthropometric Facial Region Localization (filters out background, chairs, torso)
- * - True Pupil & Eye Socket Luminance Valley Centroid Tracking (Weighted Dark Minimum)
- * - Normalized Horizontal & Vertical Gaze Vector Estimation
- * - Web Audio API Spectral Energy & Decibel Ambient Metering
- * - Real-time Augmented Reality Reticles & Telemetry HUD Overlay
+ * MockVue AI Camera Proctoring & Suspicious Activity Detection Service
+ * Real-time browser-compatible computer vision for interview integrity.
+ * Detects:
+ * - No face detected
+ * - Multiple faces detected
+ * - Looking away / frequent head movements
+ * - Leaving camera frame
+ * - Camera disconnection / stream interruption
+ * - Tab switching / window blur
  */
 
-export class ProctoringCVEngine {
-  constructor(videoElement, overlayCanvas, options = {}) {
-    this.video = videoElement;
-    this.canvas = overlayCanvas;
-    this.ctx = overlayCanvas ? overlayCanvas.getContext('2d') : null;
-
+export class ProctoringCVService {
+  constructor(options = {}) {
     this.options = {
-      targetWidth: 320,
-      targetHeight: 240,
-      gazeThresholdX: 0.25, // Max horizontal deviation fraction
-      gazeThresholdY: 0.30, // Max vertical deviation fraction
+      noFaceDurationThreshold: 3000,       // ms of continuous absence before alert
+      multiFaceDurationThreshold: 1500,    // ms of multiple faces before alert
+      lookingAwayDurationThreshold: 2500,   // ms of looking away before alert
+      cooldownPeriod: 8000,                // ms between repeated alerts of the same type
+      detectionInterval: 300,              // ms between video frame analysis ticks
       ...options,
     };
 
-    // Off-screen canvas for pixel processing
-    this.offscreenCanvas = document.createElement('canvas');
-    this.offscreenCanvas.width = this.options.targetWidth;
-    this.offscreenCanvas.height = this.options.targetHeight;
-    this.offscreenCtx = this.offscreenCanvas.getContext('2d', { willReadFrequently: true });
+    this.videoElement = null;
+    this.canvasElement = null;
+    this.ctx = null;
+    this.stream = null;
+    this.intervalId = null;
+    this.isMonitoring = false;
 
-    // Audio Analysis State
-    this.audioContext = null;
-    this.analyser = null;
-    this.audioDataArray = null;
-    this.audioSource = null;
+    // Detection state trackers
+    this.noFaceStartTime = null;
+    this.multiFaceStartTime = null;
+    this.lookingAwayStartTime = null;
+    this.recentHeadPositions = [];
+    this.lastEventTimes = {};
 
-    // Smoothed state across frames to eliminate jitter
-    this.smoothedFaceBox = null;
-    this.smoothedEyes = null;
-    this.missedFrames = 0;
+    // Callbacks
+    this.onEvent = null;
+    this.onWarning = null;
+    this.onStatusChange = null;
 
-    // Animation & Loop
-    this.isRunning = false;
-    this.animationFrameId = null;
+    // Browser detector instances
+    this.nativeFaceDetector = null;
+    this.mediaPipeDetector = null;
 
-    // Analysis telemetry state
-    this.lastAnalysis = {
-      faceDetected: false,
-      faceCount: 0,
-      faceBox: null,
-      eyes: null,
-      gaze: { centered: true, dx: 0, dy: 0, label: 'CENTERED' },
-      audioDb: 0,
-      isSpeaking: false,
-      timestamp: Date.now(),
-    };
+    // Visibility handlers
+    this.handleVisibilityChange = this.handleVisibilityChange.bind(this);
+    this.handleWindowBlur = this.handleWindowBlur.bind(this);
+    this.handleWindowFocus = this.handleWindowFocus.bind(this);
   }
 
   /**
-   * Initialize Web Audio Analysis from MediaStream
+   * Initializes hardware stream and binds elements.
    */
-  initAudio(stream) {
-    if (!stream || stream.getAudioTracks().length === 0) return;
-    try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      this.audioContext = new AudioCtx();
-      this.analyser = this.audioContext.createAnalyser();
-      this.analyser.fftSize = 256;
-      this.analyser.smoothingTimeConstant = 0.8;
+  async init({ videoElement, canvasElement, onEvent, onWarning, onStatusChange }) {
+    this.videoElement = videoElement;
+    this.canvasElement = canvasElement;
+    if (this.canvasElement) {
+      this.ctx = this.canvasElement.getContext('2d', { willReadFrequently: true });
+    }
 
-      this.audioSource = this.audioContext.createMediaStreamSource(stream);
-      this.audioSource.connect(this.analyser);
-      this.audioDataArray = new Uint8Array(this.analyser.frequencyBinCount);
-    } catch (e) {
-      console.warn('[Proctoring CV] Audio analyzer initialization skipped:', e.message);
+    this.onEvent = onEvent || (() => {});
+    this.onWarning = onWarning || (() => {});
+    this.onStatusChange = onStatusChange || (() => {});
+
+    // 1. Check for native FaceDetector API (available in modern Chromium)
+    if (typeof window !== 'undefined' && 'FaceDetector' in window) {
+      try {
+        this.nativeFaceDetector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 4 });
+      } catch (e) {
+        console.warn('[PROCTORING] Native FaceDetector initialization failed:', e);
+      }
+    }
+
+    // 2. Request webcam stream
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          facingMode: 'user',
+        },
+        audio: false,
+      });
+
+      if (this.videoElement) {
+        this.videoElement.srcObject = this.stream;
+        await this.videoElement.play().catch(() => {});
+      }
+
+      // Listen for camera track ended (e.g. disconnected or permission revoked)
+      const videoTrack = this.stream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.onended = () => {
+          this.triggerEvent('camera_disconnected', {
+            description: 'Camera being stopped or disconnected.',
+            confidence: 1.0,
+            durationSeconds: 1,
+            warning: 'Warning: Camera stream was interrupted. Please ensure your camera is connected.',
+          });
+        };
+      }
+
+      this.isMonitoring = true;
+      this.bindTabListeners();
+      this.startDetectionLoop();
+
+      this.onStatusChange({
+        isMonitoring: true,
+        cameraActive: true,
+        faceCount: 1,
+        isLookingAtScreen: true,
+      });
+
+      return { success: true };
+    } catch (err) {
+      const isDenied = err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError';
+      const msg = isDenied
+        ? 'Camera permission was denied. Please allow camera access to continue proctored interview.'
+        : `Camera initialization error: ${err.message}`;
+
+      this.onWarning(msg);
+      this.onStatusChange({
+        isMonitoring: false,
+        cameraActive: false,
+        error: msg,
+      });
+
+      throw new Error(msg);
     }
   }
 
+  bindTabListeners() {
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', this.handleVisibilityChange);
+      window.addEventListener('blur', this.handleWindowBlur);
+      window.addEventListener('focus', this.handleWindowFocus);
+    }
+  }
+
+  unbindTabListeners() {
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+      window.removeEventListener('blur', this.handleWindowBlur);
+      window.removeEventListener('focus', this.handleWindowFocus);
+    }
+  }
+
+  handleVisibilityChange() {
+    if (!this.isMonitoring) return;
+    if (document.visibilityState === 'hidden') {
+      this.triggerEvent('tab_switched', {
+        description: 'Candidate switched browser tabs or minimized window.',
+        confidence: 1.0,
+        durationSeconds: 1,
+        warning: 'Warning: Leaving the interview tab is recorded.',
+      });
+    }
+  }
+
+  handleWindowBlur() {
+    if (!this.isMonitoring) return;
+    this.triggerEvent('window_blurred', {
+      description: 'Candidate clicked outside interview window or blurred window focus.',
+      confidence: 0.95,
+      durationSeconds: 1,
+      warning: 'Warning: Leaving the interview tab is recorded.',
+    });
+  }
+
+  handleWindowFocus() {
+    // Return focus logged if needed
+  }
+
+  startDetectionLoop() {
+    if (this.intervalId) clearInterval(this.intervalId);
+
+    this.intervalId = setInterval(async () => {
+      if (!this.isMonitoring || !this.videoElement || this.videoElement.readyState < 2) {
+        return;
+      }
+
+      try {
+        await this.analyzeFrame();
+      } catch (err) {
+        // Frame analysis error handled silently to avoid interrupting stream
+      }
+    }, this.options.detectionInterval);
+  }
+
   /**
-   * Start the continuous Computer Vision & Audio loop
+   * Evaluates current frame for faces, head orientation, and position.
    */
-  start(onFrameTelemetry) {
-    if (this.isRunning) return;
-    this.isRunning = true;
+  async analyzeFrame() {
+    const video = this.videoElement;
+    const now = Date.now();
 
-    const loop = async () => {
-      if (!this.isRunning) return;
+    // 1. Detect faces using native FaceDetector if present, or Canvas-based computer vision
+    let faces = [];
+    if (this.nativeFaceDetector) {
+      try {
+        const detected = await this.nativeFaceDetector.detect(video);
+        faces = detected.map((f) => ({
+          box: {
+            x: f.boundingBox.x / video.videoWidth,
+            y: f.boundingBox.y / video.videoHeight,
+            width: f.boundingBox.width / video.videoWidth,
+            height: f.boundingBox.height / video.videoHeight,
+          },
+          landmarks: f.landmarks || [],
+        }));
+      } catch (e) {
+        faces = this.fallbackCanvasFaceDetection(video);
+      }
+    } else {
+      faces = this.fallbackCanvasFaceDetection(video);
+    }
 
-      if (this.video && this.video.readyState >= 2) {
-        const telemetry = this.analyzeCurrentFrame();
-        this.lastAnalysis = telemetry;
+    const faceCount = faces.length;
+    let isLookingAtScreen = true;
+    let isLeavingFrame = false;
 
-        if (this.canvas && this.ctx) {
-          this.renderHUD(telemetry);
+    // 2. State Rule 1: No Face Detected
+    if (faceCount === 0) {
+      if (!this.noFaceStartTime) {
+        this.noFaceStartTime = now;
+      } else if (now - this.noFaceStartTime >= this.options.noFaceDurationThreshold) {
+        const durationSec = Math.round((now - this.noFaceStartTime) / 1000);
+        this.triggerEvent('no_face_detected', {
+          description: `No face detected in camera frame for ${durationSec}s.`,
+          confidence: 0.9,
+          durationSeconds: durationSec,
+          warning: 'Warning: No face detected. Please remain in front of the camera.',
+        });
+      }
+    } else {
+      this.noFaceStartTime = null;
+    }
+
+    // 3. State Rule 2: Multiple Faces Detected
+    if (faceCount > 1) {
+      if (!this.multiFaceStartTime) {
+        this.multiFaceStartTime = now;
+      } else if (now - this.multiFaceStartTime >= this.options.multiFaceDurationThreshold) {
+        this.triggerEvent('multiple_faces_detected', {
+          description: `${faceCount} people detected in camera frame.`,
+          confidence: 0.95,
+          durationSeconds: Math.round((now - this.multiFaceStartTime) / 1000),
+          warning: 'Warning: Multiple faces detected.',
+        });
+      }
+    } else {
+      this.multiFaceStartTime = null;
+    }
+
+    // 4. State Rule 3: Single Face Position & Gaze/Head Direction
+    if (faceCount === 1) {
+      const face = faces[0];
+      const centerX = face.box.x + face.box.width / 2;
+      const centerY = face.box.y + face.box.height / 2;
+
+      // Track trajectory
+      this.recentHeadPositions.push({ x: centerX, y: centerY, time: now });
+      if (this.recentHeadPositions.length > 10) {
+        this.recentHeadPositions.shift();
+      }
+
+      // Check if candidate is near screen boundaries (leaving frame)
+      if (centerX < 0.15 || centerX > 0.85 || centerY < 0.15 || centerY > 0.85) {
+        isLeavingFrame = true;
+        this.triggerEvent('left_frame', {
+          description: 'Candidate partially or fully left the camera frame.',
+          confidence: 0.85,
+          durationSeconds: 2,
+          warning: 'Warning: Please remain centered in front of the camera.',
+        });
+      }
+
+      // Check if looking away (centroid far from center: |centerX - 0.5| > 0.22 or |centerY - 0.5| > 0.25)
+      const isDeviated = Math.abs(centerX - 0.5) > 0.22 || Math.abs(centerY - 0.5) > 0.25;
+
+      // Frequent head movements check: rapid variance in positions
+      let isRapidMovement = false;
+      if (this.recentHeadPositions.length >= 6) {
+        const deltas = [];
+        for (let i = 1; i < this.recentHeadPositions.length; i++) {
+          const dx = this.recentHeadPositions[i].x - this.recentHeadPositions[i - 1].x;
+          const dy = this.recentHeadPositions[i].y - this.recentHeadPositions[i - 1].y;
+          deltas.push(Math.sqrt(dx * dx + dy * dy));
         }
-
-        if (onFrameTelemetry) {
-          onFrameTelemetry(telemetry);
+        const avgDelta = deltas.reduce((a, b) => a + b, 0) / deltas.length;
+        if (avgDelta > 0.08) {
+          isRapidMovement = true;
         }
       }
 
-      this.animationFrameId = requestAnimationFrame(loop);
-    };
+      if (isDeviated || isRapidMovement) {
+        isLookingAtScreen = false;
+        if (!this.lookingAwayStartTime) {
+          this.lookingAwayStartTime = now;
+        } else if (now - this.lookingAwayStartTime >= this.options.lookingAwayDurationThreshold) {
+          const durationSec = Math.round((now - this.lookingAwayStartTime) / 1000);
+          this.triggerEvent('looking_away', {
+            description: isRapidMovement
+              ? 'Candidate exhibited frequent head movements away from screen.'
+              : `Candidate looking away from screen for ${durationSec}s.`,
+            confidence: 0.88,
+            durationSeconds: durationSec,
+            warning: 'Warning: Please look at your screen.',
+          });
+        }
+      } else {
+        this.lookingAwayStartTime = null;
+      }
+    }
 
-    this.animationFrameId = requestAnimationFrame(loop);
+    // Render bounding overlay if canvas is available
+    if (this.canvasElement && this.ctx) {
+      this.drawOverlay(faces, isLookingAtScreen);
+    }
+
+    // Notify status listener
+    this.onStatusChange({
+      isMonitoring: true,
+      cameraActive: true,
+      faceCount,
+      isLookingAtScreen,
+      isLeavingFrame,
+    });
   }
 
   /**
-   * Stop loop and release Web Audio resources
+   * Fast, reliable HTML5 Canvas skin-tone, luminance gradient & cluster analyzer.
+   * Works in 100% of browsers without needing remote weights or CDN connections.
    */
-  stop() {
-    this.isRunning = false;
-    if (this.animationFrameId) {
-      cancelAnimationFrame(this.animationFrameId);
-      this.animationFrameId = null;
-    }
-    if (this.audioContext && this.audioContext.state !== 'closed') {
-      try {
-        this.audioContext.close();
-      } catch (e) {}
-    }
-  }
-
-  /**
-   * Analyze audio levels using Web Audio FFT
-   */
-  getAudioTelemetry() {
-    if (!this.analyser || !this.audioDataArray) {
-      return { audioDb: 0, isSpeaking: false };
+  fallbackCanvasFaceDetection(video) {
+    if (!this.canvasElement || !this.ctx) {
+      // Nominal default if no canvas attached
+      return [{ box: { x: 0.35, y: 0.25, width: 0.3, height: 0.4 } }];
     }
 
-    this.analyser.getByteFrequencyData(this.audioDataArray);
+    const width = 120;
+    const height = 90;
+    this.canvasElement.width = width;
+    this.canvasElement.height = height;
 
-    let sum = 0;
-    for (let i = 0; i < this.audioDataArray.length; i++) {
-      sum += this.audioDataArray[i];
-    }
-    const average = sum / this.audioDataArray.length;
-    const audioDb = Math.round((average / 255) * 100);
-    const isSpeaking = audioDb > 25; // Human speech threshold
+    this.ctx.drawImage(video, 0, 0, width, height);
+    const imgData = this.ctx.getImageData(0, 0, width, height);
+    const data = imgData.data;
 
-    return { audioDb, isSpeaking };
-  }
-
-  /**
-   * Robust Face & Pupil Landmark Localization
-   */
-  analyzeCurrentFrame() {
-    const width = this.options.targetWidth;
-    const height = this.options.targetHeight;
-
-    // Draw downsampled frame to offscreen canvas
-    this.offscreenCtx.drawImage(this.video, 0, 0, width, height);
-    const imageData = this.offscreenCtx.getImageData(0, 0, width, height);
-    const data = imageData.data;
-
-    // 1. ANTHROPOMETRIC HEAD REGION SEGMENTATION
-    // Restrict head search to upper-middle 70% of frame where seated candidate sits
-    const searchXMin = Math.round(width * 0.12);
-    const searchXMax = Math.round(width * 0.88);
-    const searchYMin = Math.round(height * 0.05);
-    const searchYMax = Math.round(height * 0.78);
-
-    // Compute luminance map & skin/hair mask
-    const lum = new Float32Array(width * height);
-    const skinMask = new Uint8Array(width * height);
-
-    let totalSkin = 0;
+    let skinPixelCount = 0;
     let sumX = 0;
     let sumY = 0;
-    let minX = width, maxX = 0, minY = height, maxY = 0;
+    let minX = width;
+    let maxX = 0;
+    let minY = height;
+    let maxY = 0;
 
-    for (let y = searchYMin; y < searchYMax; y++) {
-      for (let x = searchXMin; x < searchXMax; x++) {
-        const idx = (y * width + x) * 4;
-        const r = data[idx];
-        const g = data[idx + 1];
-        const b = data[idx + 2];
+    // Sample pixels in step of 2 for high performance (~60fps)
+    for (let y = 0; y < height; y += 2) {
+      for (let x = 0; x < width; x += 2) {
+        const offset = (y * width + x) * 4;
+        const r = data[offset];
+        const g = data[offset + 1];
+        const b = data[offset + 2];
 
-        // Perceived luminance
-        const yVal = 0.299 * r + 0.587 * g + 0.114 * b;
-        lum[y * width + x] = yVal;
-
-        // Chrominance Skin Test in YCbCr:
-        const cb = -0.169 * r - 0.331 * g + 0.500 * b + 128;
-        const cr = 0.500 * r - 0.419 * g - 0.081 * b + 128;
-
-        // Calibrated skin color locus
-        const isSkin = (cb >= 78 && cb <= 128 && cr >= 132 && cr <= 172 && r > 45 && g > 30 && b > 20);
+        // Skin-chroma rule: R > G > B and luminance contrast
+        const isSkin = r > 60 && g > 40 && b > 20 &&
+                       r > g && (r - g) > 12 &&
+                       Math.abs(r - g) < 140 &&
+                       r > b;
 
         if (isSkin) {
-          skinMask[y * width + x] = 1;
-          totalSkin++;
+          skinPixelCount++;
           sumX += x;
           sumY += y;
           if (x < minX) minX = x;
@@ -203,322 +383,112 @@ export class ProctoringCVEngine {
       }
     }
 
-    let faceDetected = false;
-    let rawFaceBox = null;
-
-    // Minimum skin density for a real human head in frame
-    if (totalSkin >= 280 && maxX > minX && maxY > minY) {
-      const centerX = sumX / totalSkin;
-      const centerY = sumY / totalSkin;
-
-      // Refined Anthropometric head dimensions:
-      // A seated head is about 0.30W to 0.45W wide, with aspect ratio height:width ~ 1.25 : 1
-      const measuredWidth = Math.max(width * 0.24, Math.min(width * 0.52, (maxX - minX) * 0.72));
-      const measuredHeight = measuredWidth * 1.30; // Canonical human face aspect ratio
-
-      // Head top starts above skin centroid (includes forehead and brow)
-      const headTop = Math.max(searchYMin, centerY - measuredHeight * 0.52);
-      const headLeft = Math.max(searchXMin, centerX - measuredWidth * 0.50);
-
-      rawFaceBox = {
-        x: headLeft,
-        y: headTop,
-        width: measuredWidth,
-        height: measuredHeight,
-      };
-
-      faceDetected = true;
-      this.missedFrames = 0;
-    } else {
-      this.missedFrames++;
-      // Brief temporal persistence to avoid flickering on blinking/rapid motion
-      if (this.missedFrames < 8 && this.smoothedFaceBox) {
-        faceDetected = true;
-        rawFaceBox = this.smoothedFaceBox;
-      }
+    // Minimum skin density for a face cluster
+    if (skinPixelCount < 60) {
+      return [];
     }
 
-    let faceBox = null;
-    let eyes = null;
-    let gaze = { centered: true, dx: 0, dy: 0, label: 'CENTERED' };
+    const boxW = Math.max(0.15, (maxX - minX) / width);
+    const boxH = Math.max(0.2, (maxY - minY) / height);
+    const boxX = Math.max(0, Math.min(1 - boxW, minX / width));
+    const boxY = Math.max(0, Math.min(1 - boxH, minY / height));
 
-    if (faceDetected && rawFaceBox) {
-      // Exponential moving average filter for buttery smooth bounding box
-      if (!this.smoothedFaceBox) {
-        this.smoothedFaceBox = { ...rawFaceBox };
-      } else {
-        const alpha = 0.25;
-        this.smoothedFaceBox = {
-          x: this.smoothedFaceBox.x * (1 - alpha) + rawFaceBox.x * alpha,
-          y: this.smoothedFaceBox.y * (1 - alpha) + rawFaceBox.y * alpha,
-          width: this.smoothedFaceBox.width * (1 - alpha) + rawFaceBox.width * alpha,
-          height: this.smoothedFaceBox.height * (1 - alpha) + rawFaceBox.height * alpha,
-        };
-      }
-      faceBox = this.smoothedFaceBox;
-
-      // 2. TRUE PUPIL & EYE SOCKET LUMINANCE VALLEY TRACKING
-      // Anatomical eye line: exactly 38% to 48% of face height from head top
-      const eyeBandTop = Math.round(faceBox.y + faceBox.height * 0.36);
-      const eyeBandBottom = Math.round(faceBox.y + faceBox.height * 0.48);
-
-      // Left eye quadrant: 18% to 44% of face width
-      const leftEyeLeft = Math.round(faceBox.x + faceBox.width * 0.18);
-      const leftEyeRight = Math.round(faceBox.x + faceBox.width * 0.44);
-
-      // Right eye quadrant: 56% to 82% of face width
-      const rightEyeLeft = Math.round(faceBox.x + faceBox.width * 0.56);
-      const rightEyeRight = Math.round(faceBox.x + faceBox.width * 0.82);
-
-      /**
-       * Sub-pixel Pupil Valley Finder: locates weighted dark intensity minimum
-       */
-      const findPupilCenter = (rx1, rx2, ry1, ry2, defaultX, defaultY) => {
-        let weightedX = 0;
-        let weightedY = 0;
-        let totalWeight = 0;
-
-        // Find minimum luminance in eye ROI
-        let minLuminance = 255;
-        for (let y = ry1; y <= ry2; y++) {
-          if (y < 0 || y >= height) continue;
-          for (let x = rx1; x <= rx2; x++) {
-            if (x < 0 || x >= width) continue;
-            const l = lum[y * width + x];
-            if (l < minLuminance) minLuminance = l;
-          }
-        }
-
-        // Weight pixels closest to the dark valley minimum
-        const threshold = minLuminance + 28;
-        for (let y = ry1; y <= ry2; y++) {
-          if (y < 0 || y >= height) continue;
-          for (let x = rx1; x <= rx2; x++) {
-            if (x < 0 || x >= width) continue;
-            const l = lum[y * width + x];
-            if (l <= threshold) {
-              const weight = (threshold - l + 1);
-              weightedX += x * weight;
-              weightedY += y * weight;
-              totalWeight += weight;
-            }
-          }
-        }
-
-        if (totalWeight > 0) {
-          return { x: weightedX / totalWeight, y: weightedY / totalWeight };
-        }
-        return { x: defaultX, y: defaultY };
-      };
-
-      const defaultLeftX = faceBox.x + faceBox.width * 0.32;
-      const defaultRightX = faceBox.x + faceBox.width * 0.68;
-      const defaultEyeY = faceBox.y + faceBox.height * 0.42;
-
-      const rawLeftEye = findPupilCenter(leftEyeLeft, leftEyeRight, eyeBandTop, eyeBandBottom, defaultLeftX, defaultEyeY);
-      const rawRightEye = findPupilCenter(rightEyeLeft, rightEyeRight, eyeBandTop, eyeBandBottom, defaultRightX, defaultEyeY);
-
-      // Smooth eyes across frames
-      if (!this.smoothedEyes) {
-        this.smoothedEyes = { left: rawLeftEye, right: rawRightEye };
-      } else {
-        const eyeAlpha = 0.30;
-        this.smoothedEyes = {
-          left: {
-            x: this.smoothedEyes.left.x * (1 - eyeAlpha) + rawLeftEye.x * eyeAlpha,
-            y: this.smoothedEyes.left.y * (1 - eyeAlpha) + rawLeftEye.y * eyeAlpha,
-          },
-          right: {
-            x: this.smoothedEyes.right.x * (1 - eyeAlpha) + rawRightEye.x * eyeAlpha,
-            y: this.smoothedEyes.right.y * (1 - eyeAlpha) + rawRightEye.y * eyeAlpha,
-          },
-        };
-      }
-      eyes = this.smoothedEyes;
-
-      // 3. TRUE GAZE VECTOR & OFF-SCREEN CLASSIFICATION
-      // Eye midpoint relative to face center
-      const eyeMidX = (eyes.left.x + eyes.right.x) / 2;
-      const eyeMidY = (eyes.left.y + eyes.right.y) / 2;
-      const faceMidX = faceBox.x + faceBox.width * 0.5;
-      const faceExpectedEyeY = faceBox.y + faceBox.height * 0.42;
-
-      const dx = (eyeMidX - faceMidX) / (faceBox.width * 0.5);
-      const dy = (eyeMidY - faceExpectedEyeY) / (faceBox.height * 0.2);
-
-      let gazeLabel = 'CENTERED';
-      let centered = true;
-
-      // Horizontal deviation (looking left/right off-screen)
-      if (dx < -this.options.gazeThresholdX) {
-        gazeLabel = 'LOOKING RIGHT';
-        centered = false;
-      } else if (dx > this.options.gazeThresholdX) {
-        gazeLabel = 'LOOKING LEFT';
-        centered = false;
-      } else if (dy > this.options.gazeThresholdY) {
-        // Vertical deviation (looking down at lap, mobile phone, keyboard)
-        gazeLabel = 'LOOKING DOWN';
-        centered = false;
-      } else if (dy < -this.options.gazeThresholdY) {
-        gazeLabel = 'LOOKING UP';
-        centered = false;
-      }
-
-      gaze = {
-        centered,
-        dx: Number(dx.toFixed(2)),
-        dy: Number(dy.toFixed(2)),
-        label: gazeLabel,
-      };
-    } else {
-      this.smoothedFaceBox = null;
-      this.smoothedEyes = null;
+    // Multi-face check: if skin area is unusually wide and separated into two halves
+    if (boxW > 0.75 && skinPixelCount > 450) {
+      return [
+        { box: { x: boxX, y: boxY, width: boxW / 2, height: boxH } },
+        { box: { x: boxX + boxW / 2, y: boxY, width: boxW / 2, height: boxH } },
+      ];
     }
 
-    const { audioDb, isSpeaking } = this.getAudioTelemetry();
+    return [{ box: { x: boxX, y: boxY, width: boxW, height: boxH } }];
+  }
 
-    return {
-      faceDetected,
-      faceCount: faceDetected ? 1 : 0,
-      faceBox,
-      eyes,
-      gaze,
-      audioDb,
-      isSpeaking,
-      timestamp: Date.now(),
-    };
+  drawOverlay(faces, isLookingAtScreen) {
+    const canvas = this.canvasElement;
+    const ctx = this.ctx;
+    if (!canvas || !ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    faces.forEach((face) => {
+      const x = face.box.x * canvas.width;
+      const y = face.box.y * canvas.height;
+      const w = face.box.width * canvas.width;
+      const h = face.box.height * canvas.height;
+
+      ctx.strokeStyle = isLookingAtScreen ? '#16a34a' : '#ea580c';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 2]);
+      ctx.strokeRect(x, y, w, h);
+
+      ctx.fillStyle = isLookingAtScreen ? 'rgba(22, 163, 74, 0.15)' : 'rgba(234, 88, 12, 0.15)';
+      ctx.fillRect(x, y, w, h);
+    });
   }
 
   /**
-   * Render real-time Augmented Reality HUD on video preview canvas
+   * Dispatches warning and suspicious event while enforcing cooldowns.
    */
-  renderHUD(telemetry) {
-    const canvas = this.canvas;
-    const ctx = this.ctx;
-    const w = canvas.width;
-    const h = canvas.height;
+  triggerEvent(eventType, { description, confidence = 0.85, durationSeconds = 1, warning }) {
+    const now = Date.now();
+    const lastTime = this.lastEventTimes[eventType] || 0;
 
-    ctx.clearRect(0, 0, w, h);
-
-    const scaleX = w / this.options.targetWidth;
-    const scaleY = h / this.options.targetHeight;
-
-    // 1. Draw Face Bounding Box & Corner Reticles
-    if (telemetry.faceDetected && telemetry.faceBox) {
-      const box = telemetry.faceBox;
-      const x = box.x * scaleX;
-      const y = box.y * scaleY;
-      const bw = box.width * scaleX;
-      const bh = box.height * scaleY;
-
-      const isCentered = telemetry.gaze.centered;
-      const bracketColor = isCentered ? '#3F6B52' : '#C59A5B'; // Forest Sage vs Antique Brass
-
-      ctx.save();
-      ctx.strokeStyle = bracketColor;
-      ctx.lineWidth = 2.5;
-
-      // Draw Precision Corner Reticles
-      const corner = Math.min(bw, bh) * 0.18;
-      // Top-Left
-      ctx.beginPath();
-      ctx.moveTo(x, y + corner);
-      ctx.lineTo(x, y);
-      ctx.lineTo(x + corner, y);
-      ctx.stroke();
-
-      // Top-Right
-      ctx.beginPath();
-      ctx.moveTo(x + bw - corner, y);
-      ctx.lineTo(x + bw, y);
-      ctx.lineTo(x + bw, y + corner);
-      ctx.stroke();
-
-      // Bottom-Left
-      ctx.beginPath();
-      ctx.moveTo(x, y + bh - corner);
-      ctx.lineTo(x, y + bh);
-      ctx.lineTo(x + corner, y + bh);
-      ctx.stroke();
-
-      // Bottom-Right
-      ctx.beginPath();
-      ctx.moveTo(x + bw - corner, y + bh);
-      ctx.lineTo(x + bw, y + bh);
-      ctx.lineTo(x + bw, y + bh - corner);
-      ctx.stroke();
-
-      // Eye & Pupil Tracking Crosshairs
-      if (telemetry.eyes) {
-        ctx.fillStyle = bracketColor;
-        ctx.strokeStyle = bracketColor;
-
-        const drawEyeTarget = (eye, label) => {
-          const ex = eye.x * scaleX;
-          const ey = eye.y * scaleY;
-
-          // Inner pupil circle
-          ctx.beginPath();
-          ctx.arc(ex, ey, 3.5, 0, Math.PI * 2);
-          ctx.fill();
-
-          // Outer crosshairs
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.moveTo(ex - 8, ey);
-          ctx.lineTo(ex + 8, ey);
-          ctx.moveTo(ex, ey - 8);
-          ctx.lineTo(ex, ey + 8);
-          ctx.stroke();
-
-          // Outer reticle circle
-          ctx.beginPath();
-          ctx.arc(ex, ey, 7, 0, Math.PI * 2);
-          ctx.stroke();
-        };
-
-        drawEyeTarget(telemetry.eyes.left, 'L');
-        drawEyeTarget(telemetry.eyes.right, 'R');
-      }
-
-      ctx.restore();
+    // Enforce cooldown to prevent spamming
+    if (now - lastTime < this.options.cooldownPeriod) {
+      return;
     }
 
-    // 2. Top Telemetry Bar with Non-Overlapping Columns
-    ctx.save();
-    ctx.fillStyle = 'rgba(23, 23, 23, 0.88)';
-    ctx.fillRect(8, 8, w - 16, 26);
-    ctx.strokeStyle = 'rgba(222, 217, 208, 0.4)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(8, 8, w - 16, 26);
+    this.lastEventTimes[eventType] = now;
 
-    ctx.font = '600 10px JetBrains Mono, monospace';
-
-    // Column 1 (Left): Face Status
-    if (telemetry.faceDetected) {
-      ctx.fillStyle = '#88BA9D'; // Sage
-      ctx.fillText('● FACE LOCKED (1)', 16, 25);
-    } else {
-      ctx.fillStyle = '#E59797'; // Crimson
-      ctx.fillText('▲ NO FACE DETECTED', 16, 25);
+    if (warning && this.onWarning) {
+      this.onWarning(warning);
     }
 
-    // Column 2 (Center): Pupil Gaze Status (Cleanly separated)
-    if (telemetry.gaze.centered) {
-      ctx.fillStyle = '#D4AA6A'; // Brass
-      ctx.fillText('GAZE: CENTERED', 135, 25);
-    } else {
-      ctx.fillStyle = '#DEAC74'; // Amber
-      ctx.fillText(`GAZE: ${telemetry.gaze.label}`, 125, 25);
+    if (this.onEvent) {
+      this.onEvent({
+        eventType,
+        description,
+        confidence,
+        durationSeconds,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  /**
+   * Stops video stream and detaches event listeners cleanly.
+   */
+  stop() {
+    this.isMonitoring = false;
+
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
     }
 
-    // Column 3 (Right): Mic Decibel Level
-    ctx.fillStyle = telemetry.isSpeaking ? '#88BA9D' : '#9E988F';
-    ctx.fillText(`MIC: ${telemetry.audioDb} dB`, w - 75, 25);
+    this.unbindTabListeners();
 
-    ctx.restore();
+    if (this.stream) {
+      this.stream.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch (e) {}
+      });
+      this.stream = null;
+    }
+
+    if (this.videoElement) {
+      this.videoElement.srcObject = null;
+    }
+
+    this.onStatusChange({
+      isMonitoring: false,
+      cameraActive: false,
+      faceCount: 0,
+      isLookingAtScreen: false,
+    });
   }
 }
 
-export default ProctoringCVEngine;
+export default ProctoringCVService;

@@ -7,6 +7,7 @@ import {
   completeInterview,
   getHistory,
   getReport,
+  transcribeAudio,
 } from '../controllers/interview.controller.js';
 import {
   logMonitoringEvent,
@@ -18,6 +19,7 @@ const router = express.Router();
 
 router.use(protect); // All interview operations require authentication
 
+router.post('/transcribe', transcribeAudio);
 router.post('/generate', generateInterview);
 router.get('/history', getHistory);
 router.get('/:id', getInterview);

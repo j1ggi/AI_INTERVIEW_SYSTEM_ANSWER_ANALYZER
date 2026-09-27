@@ -208,6 +208,14 @@ export const submitAnswer = async (req, res, next) => {
       topic: question.topic,
     });
 
+    const scoreOutOf10 = evaluation.scoreOutOf10 !== undefined
+      ? evaluation.scoreOutOf10
+      : Math.round((evaluation.overallScore || 0) / 10);
+
+    const overallScore = evaluation.overallScore !== undefined
+      ? evaluation.overallScore
+      : scoreOutOf10 * 10;
+
     // 2. Persist Answer & Evaluation
     const answer = await Answer.create({
       interviewId: interview._id,
@@ -215,11 +223,16 @@ export const submitAnswer = async (req, res, next) => {
       userId: req.user._id,
       responseType,
       responseText: responseText.trim(),
-      overallScore: evaluation.overallScore,
-      criteriaScores: evaluation.criteriaScores,
-      correctConcepts: evaluation.correctConcepts || [],
-      missingConcepts: evaluation.missingConcepts || [],
-      mistakes: evaluation.mistakes || [],
+      overallScore,
+      scoreOutOf10,
+      criteriaScores: evaluation.criteriaScores || {},
+      correctPoints: evaluation.correctPoints || evaluation.correctConcepts || [],
+      missingPoints: evaluation.missingPoints || evaluation.missingConcepts || [],
+      incorrectPoints: evaluation.incorrectPoints || evaluation.mistakes || [],
+      improvement: evaluation.improvement || '',
+      correctConcepts: evaluation.correctConcepts || evaluation.correctPoints || [],
+      missingConcepts: evaluation.missingConcepts || evaluation.missingPoints || [],
+      mistakes: evaluation.mistakes || evaluation.incorrectPoints || [],
       explanation: evaluation.explanation || '',
       feedback: evaluation.feedback || '',
       improvedAnswer: evaluation.improvedAnswer || '',
@@ -239,11 +252,16 @@ export const submitAnswer = async (req, res, next) => {
 
     if (isComplete) {
       const allAnswers = await Answer.find({ interviewId: interview._id });
-      const avgScore = Math.round(
-        allAnswers.reduce((sum, a) => sum + a.overallScore, 0) / allAnswers.length
+      const avgScore100 = Math.round(
+        allAnswers.reduce((sum, a) => sum + (a.overallScore || 0), 0) / (allAnswers.length || 1)
       );
+      const avgScore10 = Math.round(
+        (allAnswers.reduce((sum, a) => sum + (a.scoreOutOf10 !== undefined ? a.scoreOutOf10 : (a.overallScore || 0) / 10), 0) / (allAnswers.length || 1)) * 10
+      ) / 10;
+
       interview.status = 'completed';
-      interview.overallScore = avgScore;
+      interview.overallScore = avgScore100;
+      interview.scoreOutOf10 = avgScore10;
       interview.completedAt = new Date();
     }
 
@@ -277,12 +295,16 @@ export const completeInterview = async (req, res, next) => {
 
     if (interview.status !== 'completed') {
       const answers = await Answer.find({ interviewId: interview._id });
-      const avgScore = answers.length
-        ? Math.round(answers.reduce((acc, curr) => acc + curr.overallScore, 0) / answers.length)
+      const avgScore100 = answers.length
+        ? Math.round(answers.reduce((acc, curr) => acc + (curr.overallScore || 0), 0) / answers.length)
+        : 0;
+      const avgScore10 = answers.length
+        ? Math.round((answers.reduce((acc, curr) => acc + (curr.scoreOutOf10 !== undefined ? curr.scoreOutOf10 : (curr.overallScore || 0) / 10), 0) / answers.length) * 10) / 10
         : 0;
 
       interview.status = terminated ? 'terminated' : (interview.status === 'terminated' ? 'terminated' : 'completed');
-      interview.overallScore = avgScore;
+      interview.overallScore = avgScore100;
+      interview.scoreOutOf10 = avgScore10;
       interview.completedAt = interview.completedAt || new Date();
       if (reason) {
         interview.terminationReason = reason;
@@ -297,6 +319,7 @@ export const completeInterview = async (req, res, next) => {
         : 'Interview session completed.',
       status: interview.status,
       overallScore: interview.overallScore,
+      scoreOutOf10: interview.scoreOutOf10,
       terminationReason: interview.terminationReason,
       completedAt: interview.completedAt,
     });
@@ -336,21 +359,63 @@ export const getReport = async (req, res, next) => {
     // Retrieve answers with evaluations
     const answers = await Answer.find({ interviewId: interview._id });
 
+    const interviewObj = interview.toObject();
+    if (interviewObj.scoreOutOf10 === null || interviewObj.scoreOutOf10 === undefined) {
+      interviewObj.scoreOutOf10 = answers.length
+        ? Math.round((answers.reduce((sum, a) => sum + (a.scoreOutOf10 !== undefined ? a.scoreOutOf10 : (a.overallScore || 0) / 10), 0) / answers.length) * 10) / 10
+        : Math.round((interviewObj.overallScore || 0) / 10);
+    }
+
     // Combine questions with corresponding answers
     const reportData = interview.questions.map((q) => {
       const ans = answers.find((a) => a.questionId.toString() === q._id.toString());
       return {
         question: q,
         answer: ans || null,
+        questionText: q.questionText,
+        candidateResponse: ans?.responseText || '',
+        evaluation: ans ? {
+          overallScore: ans.overallScore,
+          scoreOutOf10: ans.scoreOutOf10 !== undefined ? ans.scoreOutOf10 : Math.round((ans.overallScore || 0) / 10),
+          criteriaScores: ans.criteriaScores,
+          correctPoints: ans.correctPoints || ans.correctConcepts || [],
+          missingPoints: ans.missingPoints || ans.missingConcepts || [],
+          incorrectPoints: ans.incorrectPoints || ans.mistakes || [],
+          improvement: ans.improvement || ans.feedback || '',
+          feedback: ans.feedback || '',
+        } : null,
+        exemplarAnswer: q.exemplarAnswer || (q.referenceConcepts ? q.referenceConcepts.join('. ') : ''),
       };
     });
 
     res.status(200).json({
       success: true,
-      interview,
+      interview: interviewObj,
       report: reportData,
     });
   } catch (error) {
     next(error);
   }
 };
+
+export const transcribeAudio = async (req, res, next) => {
+  try {
+    const audioPayload = req.body.audioBase64 || req.body.audioData;
+    const mimeType = req.body.mimeType || 'audio/webm';
+    if (!audioPayload) {
+      throw new ValidationError('Audio data is required for transcription.');
+    }
+
+    const result = await aiService.transcribeAudio({ audioBase64: audioPayload, mimeType });
+
+    res.status(200).json({
+      success: true,
+      transcript: result.transcript || '',
+      provider: result.provider || 'unknown',
+      isFallback: result.isFallback || false,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

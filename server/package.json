@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "test": "node tests/e2e_full_flow.test.js && node tests/proctoring_fullscreen_test.js"
+    "test": "node tests/e2e_full_flow.test.js && node tests/proctoring_fullscreen_test.js && node tests/verify_full_system.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

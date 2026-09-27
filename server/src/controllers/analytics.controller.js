@@ -164,20 +164,17 @@ export const logMonitoringEvent = async (req, res, next) => {
 
     interview.proctoringViolations = (interview.proctoringViolations || 0) + 1;
 
-    // Strict tab switch or window blur rule: "if someone goes from that tab test end"
-    if (eventType === 'tab_switched' || eventType === 'window_blurred') {
-      interview.status = 'terminated';
-      interview.terminationReason = 'Exam terminated: Candidate navigated away from the examination tab.';
-      interview.completedAt = new Date();
-    } else if (eventType === 'fullscreen_exit') {
-      interview.status = 'terminated';
-      interview.terminationReason = 'Exam terminated: Full-screen examination mode was exited.';
-      interview.completedAt = new Date();
-    } else if (eventType === 'max_warnings_exceeded' || interview.proctoringViolations >= 5) {
-      // 5-Warning Rule: "after 5 warning test ends"
-      interview.status = 'terminated';
-      interview.terminationReason = 'Exam terminated: Exceeded maximum allowed proctoring warnings (5 infractions accumulated).';
-      interview.completedAt = new Date();
+    // Terminate only if in_progress and upon explicit fullscreen exit or exceeding max warnings threshold
+    if (interview.status === 'in_progress') {
+      if (eventType === 'fullscreen_exit') {
+        interview.status = 'terminated';
+        interview.terminationReason = 'Exam terminated: Full-screen examination mode was exited.';
+        interview.completedAt = new Date();
+      } else if (eventType === 'max_warnings_exceeded') {
+        interview.status = 'terminated';
+        interview.terminationReason = 'Exam terminated: Exceeded maximum allowed proctoring warnings (5 infractions accumulated).';
+        interview.completedAt = new Date();
+      }
     }
 
     await interview.save();

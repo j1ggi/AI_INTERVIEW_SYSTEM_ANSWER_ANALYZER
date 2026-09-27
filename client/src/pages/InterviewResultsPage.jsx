@@ -1,286 +1,207 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { 
-  Award, 
-  Check, 
+  CheckCircle, 
   AlertCircle, 
+  ArrowLeft, 
   ChevronDown, 
   ChevronUp, 
-  ArrowRight, 
-  Terminal, 
-  ShieldAlert, 
-  BookOpen,
-  Compass,
+  Sparkles,
   Plus,
-  FileText,
-  Printer
+  Compass,
+  BookOpen,
+  Shield,
+  ShieldCheck,
+  AlertTriangle,
+  Camera
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
-import { Button } from '../components/ui/Button';
-import { Card } from '../components/ui/Card';
-import { Badge } from '../components/ui/Badge';
-import { Spinner } from '../components/ui/Spinner';
 import api from '../services/api';
 
 export const InterviewResultsPage = () => {
   const { id } = useParams();
-  const navigate = useNavigate();
-
-  const [data, setData] = useState(null);
+  const [interview, setInterview] = useState(null);
+  const [report, setReport] = useState([]);
+  const [monitoringEvents, setMonitoringEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedIndex, setExpandedIndex] = useState(0);
-  const [monitoringEvents, setMonitoringEvents] = useState([]);
 
   useEffect(() => {
     Promise.all([
       api.get(`/interviews/${id}/report`),
-      api.get(`/interviews/${id}/monitoring`).catch(() => ({ events: [] }))
+      api.get(`/interviews/${id}/monitoring`).catch(() => ({ events: [] })),
     ])
       .then(([res, monRes]) => {
-        setData(res);
-        setMonitoringEvents(monRes?.events || []);
+        setInterview(res.interview);
+        setReport(res.report || []);
+        setMonitoringEvents(monRes.events || []);
         setLoading(false);
-
-        if (res.interview?.overallScore >= 70) {
-          try {
-            confetti({
-              particleCount: 70,
-              spread: 55,
-              origin: { y: 0.6 },
-              colors: ['#7A263A', '#C59A5B', '#3F6B52', '#F7F4EE']
-            });
-          } catch (e) {
-            // Ignore
-          }
-        }
       })
       .catch((err) => {
-        setError(err.message || 'Failed to load interview report.');
+        setError(err.message || 'Failed to load interview results.');
         setLoading(false);
       });
   }, [id]);
 
   if (loading) {
     return (
-      <div className="min-h-[75vh] flex items-center justify-center">
-        <Spinner size="lg" label="Computing Comprehensive Assessment Dossier..." />
+      <div className="min-h-[70vh] flex flex-col items-center justify-center space-y-3">
+        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-slate-600">Compiling interview results report...</p>
       </div>
     );
   }
 
-  if (error || !data) {
+  if (error || !interview) {
     return (
-      <div className="max-w-md mx-auto my-20 p-6 rounded-xl border border-[#DED9D0] dark:border-[#332F2A] bg-[#FFFDF9] dark:bg-[#1C1916] text-center shadow-paper">
-        <AlertCircle className="w-8 h-8 text-[#A33B3B] mx-auto mb-2" />
-        <h2 className="text-base font-serif font-bold text-[#171717] dark:text-[#F7F4EE] mb-1">Dossier Unavailable</h2>
-        <p className="text-xs font-mono text-[#68645E] dark:text-[#9E988F] mb-5">{error || 'Session report records could not be retrieved.'}</p>
-        <Button size="sm" onClick={() => navigate('/dashboard')}>Return to Workspace</Button>
+      <div className="max-w-md mx-auto my-16 p-6 bg-white border border-slate-200 rounded-lg text-center shadow-sm space-y-4">
+        <AlertCircle className="w-8 h-8 text-red-600 mx-auto" />
+        <h2 className="text-lg font-bold text-slate-900">Results Unavailable</h2>
+        <p className="text-sm text-slate-600">{error || 'Could not load interview session.'}</p>
+        <Link
+          to="/dashboard"
+          className="inline-block bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded transition-colors"
+        >
+          Return to Dashboard
+        </Link>
       </div>
     );
   }
 
-  const { interview, report = [] } = data;
-  const overallScore = interview.overallScore || 0;
+  const answeredQuestions = report.filter((r) => r.answer);
+  const overallPercentage = interview.overallScore || (
+    answeredQuestions.length > 0
+      ? Math.round(answeredQuestions.reduce((acc, curr) => acc + (curr.answer.overallScore || 0), 0) / answeredQuestions.length)
+      : 0
+  );
+  const overallScoreOutOf10 = Math.round(overallPercentage / 10);
 
-  const totalQuestions = report.length || 1;
-  const avgTechnical = Math.round(
-    report.reduce((sum, r) => sum + (r.answer?.criteriaScores?.technicalCorrectness || 0), 0) / totalQuestions
-  );
-  const avgRelevance = Math.round(
-    report.reduce((sum, r) => sum + (r.answer?.criteriaScores?.relevance || 0), 0) / totalQuestions
-  );
-  const avgCompleteness = Math.round(
-    report.reduce((sum, r) => sum + (r.answer?.criteriaScores?.completeness || 0), 0) / totalQuestions
-  );
-  const avgClarity = Math.round(
-    report.reduce((sum, r) => sum + (r.answer?.criteriaScores?.clarity || 0), 0) / totalQuestions
-  );
+  // Compute average criteria scores (0-10)
+  const avgRelevance = answeredQuestions.length
+    ? Math.round(answeredQuestions.reduce((sum, r) => sum + (r.answer.criteriaScores?.relevance || Math.round((r.answer.overallScore || 70) / 10)), 0) / answeredQuestions.length)
+    : 0;
+
+  const avgCorrectness = answeredQuestions.length
+    ? Math.round(answeredQuestions.reduce((sum, r) => sum + (r.answer.criteriaScores?.correctness || Math.round((r.answer.overallScore || 70) / 10)), 0) / answeredQuestions.length)
+    : 0;
+
+  const avgCompleteness = answeredQuestions.length
+    ? Math.round(answeredQuestions.reduce((sum, r) => sum + (r.answer.criteriaScores?.completeness || Math.max(1, Math.round((r.answer.overallScore || 70) / 10) - 1)), 0) / answeredQuestions.length)
+    : 0;
+
+  const avgTechnicalAccuracy = answeredQuestions.length
+    ? Math.round(answeredQuestions.reduce((sum, r) => sum + (r.answer.criteriaScores?.technicalAccuracy || Math.round((r.answer.overallScore || 70) / 10)), 0) / answeredQuestions.length)
+    : 0;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 animate-fade-in font-sans">
-      {/* Assessment Dossier Masthead */}
-      <div className="p-6 sm:p-8 rounded-xl border border-[#DED9D0] dark:border-[#332F2A] bg-[#FFFDF9] dark:bg-[#1C1916] flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-paper">
-        <div className="space-y-2.5">
-          <div className="flex flex-wrap items-center gap-2 font-mono">
-            <Badge variant="brand" size="sm">{interview.difficulty?.toUpperCase()}</Badge>
-            <Badge variant="neutral" size="sm">{interview.targetRole}</Badge>
-            <Badge variant={overallScore >= 75 ? 'success' : overallScore >= 50 ? 'warning' : 'danger'} size="sm">
-              {overallScore >= 75 ? 'PLACEMENT READY' : overallScore >= 50 ? 'PROFICIENT' : 'NEEDS REFINEMENT'}
-            </Badge>
-          </div>
-          <div>
-            <span className="font-mono text-[10px] uppercase tracking-wider text-[#68645E] dark:text-[#9E988F]">
-              OFFICIAL EVALUATION DOSSIER
-            </span>
-            <h1 className="text-2xl sm:text-3xl font-serif font-bold text-[#171717] dark:text-[#F7F4EE] tracking-tight">
-              {interview.title || 'Technical Assessment Report'}
-            </h1>
-          </div>
-          <p className="text-xs text-[#68645E] dark:text-[#9E988F] font-mono">
-            Concluded: {new Date(interview.completedAt || interview.updatedAt).toLocaleDateString(undefined, {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric'
-            })} • ID: #{interview._id?.slice(-8).toUpperCase()}
+    <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+      {/* Top Banner / Summary */}
+      <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+        <div>
+          <Link
+            to="/dashboard"
+            className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 mb-2 transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Back to Dashboard
+          </Link>
+          <h1 className="text-2xl font-bold text-slate-900">{interview.title}</h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Completed on {new Date(interview.completedAt || interview.updatedAt).toLocaleDateString()} • {answeredQuestions.length} of {report.length} questions answered
           </p>
         </div>
 
-        {/* Score Plaque */}
-        <div className="flex flex-col items-center justify-center p-5 rounded-xl bg-[#F7F4EE] dark:bg-[#141210] border border-[#DED9D0] dark:border-[#332F2A] min-w-[190px] font-mono text-center">
-          <span className="text-[10px] uppercase tracking-wider text-[#68645E] dark:text-[#9E988F] font-medium">
-            OVERALL RUBRIC SCORE
+        {/* Overall Score Box */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center min-w-[160px]">
+          <span className="text-xs text-blue-700 font-semibold uppercase tracking-wider block">Overall Score</span>
+          <span className="text-3xl sm:text-4xl font-extrabold text-blue-700 my-0.5 block">
+            {overallScoreOutOf10}/10
           </span>
-          <span className="text-4xl sm:text-5xl font-serif font-bold text-[#7A263A] dark:text-[#D4AA6A] my-1">
-            {overallScore}%
-          </span>
-          <span className="text-[11px] text-[#68645E] dark:text-[#9E988F]">
-            {report.filter((r) => r.answer).length} OF {report.length} RESPONSES EVALUATED
-          </span>
+          <span className="text-xs text-blue-600 font-medium">({overallPercentage}%)</span>
         </div>
       </div>
 
-      {/* Proctoring Early Termination Banner */}
-      {(interview.status === 'terminated' || interview.terminationReason) && (
-        <div className="p-4 sm:p-5 rounded-xl border border-[#E8C4C4] dark:border-[#A33B3B]/40 bg-[#FAF0F0] dark:bg-[#A33B3B]/10 flex items-start gap-3.5 text-xs">
-          <div className="w-8 h-8 rounded-lg bg-[#A33B3B]/15 text-[#A33B3B] dark:text-[#E59797] flex items-center justify-center shrink-0 border border-[#A33B3B]/30">
-            <ShieldAlert className="w-4 h-4" />
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-xs font-bold uppercase tracking-wider text-[#A33B3B] dark:text-[#E59797]">
-                EXAMINATION CONCLUDED EARLY BY PROCTORING
-              </span>
-              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[#A33B3B]/10 text-[#A33B3B] dark:text-[#E59797] border border-[#A33B3B]/20">
-                SECURITY TERMINATION
-              </span>
-            </div>
-            <p className="text-[#171717] dark:text-[#F7F4EE] font-sans leading-relaxed">
-              Reason: <strong>{interview.terminationReason || 'Full-screen mode was exited during the examination.'}</strong>
-              {' '}All questions submitted prior to exit have been fully evaluated according to the 4-tier rubric.
-            </p>
-          </div>
+      {/* Rubric Criteria Summary Cards (0-10 Scale) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm text-center">
+          <span className="text-xs text-slate-500 block mb-1">Relevance</span>
+          <span className="text-xl font-bold text-slate-900">{avgRelevance}/10</span>
+          <p className="text-[11px] text-slate-400 mt-1">Directly answers question</p>
         </div>
-      )}
 
-      {/* Proctoring & Security Audit Trail */}
-      {monitoringEvents.length > 0 && (
-        <Card className="p-5 shadow-paper space-y-3">
-          <div className="flex items-center justify-between pb-2 border-b border-[#DED9D0] dark:border-[#332F2A]">
-            <div className="flex items-center gap-2 font-mono text-xs">
-              <ShieldAlert className="w-4 h-4 text-[#7A263A] dark:text-[#D4AA6A]" />
-              <span className="font-bold text-[#171717] dark:text-[#F7F4EE] uppercase tracking-wider">
-                Proctoring & Anti-Cheat Audit Trail
-              </span>
-            </div>
-            <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-[#FAF0F0] text-[#A33B3B] dark:bg-[#A33B3B]/20 dark:text-[#E59797] border border-[#E8C4C4] font-semibold">
-              {monitoringEvents.length} INCIDENTS RECORDED
-            </span>
+        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm text-center">
+          <span className="text-xs text-slate-500 block mb-1">Correctness</span>
+          <span className="text-xl font-bold text-slate-900">{avgCorrectness}/10</span>
+          <p className="text-[11px] text-slate-400 mt-1">Factual accuracy</p>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm text-center">
+          <span className="text-xs text-slate-500 block mb-1">Completeness</span>
+          <span className="text-xl font-bold text-slate-900">{avgCompleteness}/10</span>
+          <p className="text-[11px] text-slate-400 mt-1">Coverage of key concepts</p>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm text-center">
+          <span className="text-xs text-slate-500 block mb-1">Technical Accuracy</span>
+          <span className="text-xl font-bold text-slate-900">{avgTechnicalAccuracy}/10</span>
+          <p className="text-[11px] text-slate-400 mt-1">CS mechanics & terms</p>
+        </div>
+      </div>
+
+      {/* AI Proctoring & Session Integrity Card */}
+      <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-sm space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-blue-600" />
+            <h2 className="text-sm font-bold text-slate-900">AI Proctoring & Session Integrity</h2>
           </div>
+          <span className="text-xs text-slate-500 font-medium">
+            {monitoringEvents.length === 0 ? 'Zero Infractions' : `${monitoringEvents.length} Events Logged`}
+          </span>
+        </div>
 
-          <div className="space-y-2">
-            {monitoringEvents.map((evt, idx) => (
-              <div
-                key={evt._id || idx}
-                className="p-2.5 rounded-lg bg-[#F7F4EE] dark:bg-[#141210] border border-[#DED9D0] dark:border-[#332F2A] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#A33B3B]" />
-                  <strong className="text-[#171717] dark:text-[#F7F4EE] uppercase">
-                    {evt.eventType.replace(/_/g, ' ')}
-                  </strong>
-                  <span className="text-[#68645E] dark:text-[#9E988F] text-[11px]">
-                    — {evt.description}
+        {monitoringEvents.length === 0 ? (
+          <div className="p-3.5 bg-green-50 border border-green-200 rounded-lg flex items-center gap-3">
+            <ShieldCheck className="w-5 h-5 text-green-600 shrink-0" />
+            <div className="text-xs text-green-900">
+              <span className="font-semibold block">Integrity Verified</span>
+              <span>Candidate remained centered in camera frame throughout the session with no suspicious activity detected.</span>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="text-xs text-amber-900 space-y-0.5">
+                <span className="font-semibold block">Suspicious Activity Recorded</span>
+                <span>The system observed {monitoringEvents.length} focus or presence deviation(s). Evidence is preserved below for objective review:</span>
+              </div>
+            </div>
+
+            <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-48 overflow-y-auto">
+              {monitoringEvents.map((evt, idx) => (
+                <div key={idx} className="p-2.5 px-3 flex items-center justify-between text-xs hover:bg-slate-50">
+                  <div className="space-y-0.5">
+                    <span className="font-medium text-slate-800 capitalize">
+                      {evt.eventType?.replace(/_/g, ' ')}
+                    </span>
+                    <p className="text-[11px] text-slate-500">{evt.description}</p>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {evt.timestamp ? new Date(evt.timestamp).toLocaleTimeString() : 'During session'}
                   </span>
                 </div>
-                <span className="text-[10px] text-[#68645E] dark:text-[#9E988F] shrink-0">
-                  {new Date(evt.timestamp).toLocaleTimeString()}
-                </span>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </Card>
-      )}
-
-      {/* 4-Tier Rubric Criteria Grid */}
-      <div className="space-y-3.5">
-        <div className="flex items-center justify-between pb-1 border-b border-[#DED9D0] dark:border-[#332F2A]">
-          <h2 className="text-base sm:text-lg font-serif font-bold text-[#171717] dark:text-[#F7F4EE]">
-            Rubric Criteria Breakdown
-          </h2>
-          <span className="font-mono text-[11px] text-[#68645E] dark:text-[#9E988F]">
-            WEIGHTED CALIBRATION
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-          <Card className="p-4 space-y-2">
-            <div className="flex justify-between items-center font-mono">
-              <span className="text-[11px] text-[#68645E] dark:text-[#9E988F] uppercase">Technical (40%)</span>
-              <span className="text-sm font-bold text-[#3F6B52] dark:text-[#88BA9D]">{avgTechnical} / 40</span>
-            </div>
-            <div className="w-full h-1.5 rounded-full bg-[#F0ECE4] dark:bg-[#24201C] overflow-hidden">
-              <div
-                className="h-full bg-[#3F6B52] rounded-full transition-all duration-500"
-                style={{ width: `${(avgTechnical / 40) * 100}%` }}
-              />
-            </div>
-            <p className="text-[10px] text-[#68645E] dark:text-[#9E988F] font-mono">Core mechanics & accuracy</p>
-          </Card>
-
-          <Card className="p-4 space-y-2">
-            <div className="flex justify-between items-center font-mono">
-              <span className="text-[11px] text-[#68645E] dark:text-[#9E988F] uppercase">Relevance (20%)</span>
-              <span className="text-sm font-bold text-[#7A263A] dark:text-[#D4AA6A]">{avgRelevance} / 20</span>
-            </div>
-            <div className="w-full h-1.5 rounded-full bg-[#F0ECE4] dark:bg-[#24201C] overflow-hidden">
-              <div
-                className="h-full bg-[#7A263A] dark:bg-[#D4AA6A] rounded-full transition-all duration-500"
-                style={{ width: `${(avgRelevance / 20) * 100}%` }}
-              />
-            </div>
-            <p className="text-[10px] text-[#68645E] dark:text-[#9E988F] font-mono">Direct prompt alignment</p>
-          </Card>
-
-          <Card className="p-4 space-y-2">
-            <div className="flex justify-between items-center font-mono">
-              <span className="text-[11px] text-[#68645E] dark:text-[#9E988F] uppercase">Completeness (20%)</span>
-              <span className="text-sm font-bold text-[#A66A24] dark:text-[#DEAC74]">{avgCompleteness} / 20</span>
-            </div>
-            <div className="w-full h-1.5 rounded-full bg-[#F0ECE4] dark:bg-[#24201C] overflow-hidden">
-              <div
-                className="h-full bg-[#A66A24] rounded-full transition-all duration-500"
-                style={{ width: `${(avgCompleteness / 20) * 100}%` }}
-              />
-            </div>
-            <p className="text-[10px] text-[#68645E] dark:text-[#9E988F] font-mono">Edge cases & scale hazards</p>
-          </Card>
-
-          <Card className="p-4 space-y-2">
-            <div className="flex justify-between items-center font-mono">
-              <span className="text-[11px] text-[#68645E] dark:text-[#9E988F] uppercase">Clarity (20%)</span>
-              <span className="text-sm font-bold text-[#C59A5B] dark:text-[#D4AA6A]">{avgClarity} / 20</span>
-            </div>
-            <div className="w-full h-1.5 rounded-full bg-[#F0ECE4] dark:bg-[#24201C] overflow-hidden">
-              <div
-                className="h-full bg-[#C59A5B] rounded-full transition-all duration-500"
-                style={{ width: `${(avgClarity / 20) * 100}%` }}
-              />
-            </div>
-            <p className="text-[10px] text-[#68645E] dark:text-[#9E988F] font-mono">Narrative flow & precision</p>
-          </Card>
-        </div>
+        )}
       </div>
 
-      {/* Question-by-Question Dossier Review */}
-      <div className="space-y-3.5">
-        <div className="flex items-center justify-between pb-1 border-b border-[#DED9D0] dark:border-[#332F2A]">
-          <h2 className="text-base sm:text-lg font-serif font-bold text-[#171717] dark:text-[#F7F4EE]">
-            Question Critique & Exemplar Analyses
-          </h2>
-          <span className="font-mono text-[11px] text-[#68645E] dark:text-[#9E988F]">
-            {report.length} ITEMS
-          </span>
+      {/* Question-by-Question Review Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between pb-1 border-b border-slate-200">
+          <h2 className="text-lg font-bold text-slate-900">Question Evaluation Breakdown</h2>
+          <span className="text-xs text-slate-500">{report.length} Questions</span>
         </div>
 
         <div className="space-y-3">
@@ -288,126 +209,150 @@ export const InterviewResultsPage = () => {
             const isExpanded = expandedIndex === idx;
             const q = item.question;
             const a = item.answer;
+            const score10 = a?.scoreOutOf10 !== undefined ? a.scoreOutOf10 : (a ? Math.round((a.overallScore || 0) / 10) : null);
 
             return (
               <div
                 key={q._id || idx}
-                className="rounded-xl border border-[#DED9D0] dark:border-[#332F2A] bg-[#FFFDF9] dark:bg-[#1C1916] overflow-hidden shadow-paper transition-all duration-150"
+                className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm transition-all"
               >
-                {/* Collapsible Header Bar */}
+                {/* Header / Toggle Row */}
                 <button
                   onClick={() => setExpandedIndex(isExpanded ? null : idx)}
-                  className="w-full p-4 sm:p-5 text-left flex items-start justify-between gap-4 hover:bg-[#F0ECE4]/40 dark:hover:bg-[#24201C] transition-colors"
+                  className="w-full p-4 sm:p-5 text-left flex items-start justify-between gap-4 hover:bg-slate-50 transition-colors"
                 >
-                  <div className="space-y-1.5 pr-2">
-                    <div className="flex items-center gap-2 font-mono text-xs">
-                      <span className="px-2 py-0.5 rounded-[6px] bg-[#FAF0F2] dark:bg-[#7A263A]/20 text-[#7A263A] dark:text-[#E8A5B2] font-semibold border border-[#E8C5CC] dark:border-[#7A263A]/40">
+                  <div className="space-y-1 pr-2">
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="bg-slate-100 font-semibold text-slate-700 px-2 py-0.5 rounded">
                         Q{idx + 1}
                       </span>
-                      <span className="font-semibold text-[#171717] dark:text-[#F7F4EE]">{q.topic}</span>
-                      <span className="text-[#DED9D0] dark:text-[#332F2A]">•</span>
-                      <span className="text-[#68645E] dark:text-[#9E988F]">{q.difficulty}</span>
+                      <span className="font-medium text-slate-700">{q.topic}</span>
+                      <span className="text-slate-300">•</span>
+                      <span className="text-slate-500">{q.difficulty}</span>
                     </div>
-                    <h3 className="text-sm sm:text-base font-serif font-bold text-[#171717] dark:text-[#F7F4EE] leading-snug">
+
+                    <h3 className="text-sm sm:text-base font-semibold text-slate-900 leading-snug">
                       {q.questionText}
                     </h3>
                   </div>
 
                   <div className="flex items-center gap-3 shrink-0">
-                    <span className="font-mono text-xs sm:text-sm font-bold text-[#7A263A] dark:text-[#D4AA6A]">
-                      {a ? `${a.overallScore}%` : 'Unanswered'}
+                    <span className="text-sm font-bold text-blue-600">
+                      {score10 !== null ? `${score10}/10` : 'Unanswered'}
                     </span>
                     {isExpanded ? (
-                      <ChevronUp className="w-4 h-4 text-[#68645E] dark:text-[#9E988F]" />
+                      <ChevronUp className="w-4 h-4 text-slate-400" />
                     ) : (
-                      <ChevronDown className="w-4 h-4 text-[#68645E] dark:text-[#9E988F]" />
+                      <ChevronDown className="w-4 h-4 text-slate-400" />
                     )}
                   </div>
                 </button>
 
-                {/* Expanded Details Body */}
+                {/* Details Body */}
                 {isExpanded && (
-                  <div className="p-5 border-t border-[#DED9D0] dark:border-[#332F2A] bg-[#F7F4EE]/50 dark:bg-[#141210]/50 space-y-4">
-                    {/* Candidate Submitted Response */}
-                    <div>
-                      <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-[#68645E] dark:text-[#9E988F] block mb-1">
-                        CANDIDATE SUBMITTED RESPONSE:
+                  <div className="p-5 border-t border-slate-200 bg-slate-50/50 space-y-4">
+                    {/* Student's Answer */}
+                    <div className="space-y-1">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 block">
+                        Your Submitted Answer:
                       </span>
-                      <div className="p-3.5 rounded-lg bg-[#FFFDF9] dark:bg-[#1C1916] border border-[#DED9D0] dark:border-[#332F2A] text-xs text-[#171717] dark:text-[#F7F4EE] leading-relaxed">
-                        {a ? `"${a.responseText}"` : 'No response was submitted for this question.'}
+                      <div className="p-3.5 bg-white border border-slate-200 rounded text-sm text-slate-800 leading-relaxed font-normal">
+                        {a ? a.responseText : 'No response was submitted for this question.'}
                       </div>
                     </div>
 
-                    {/* Criteria Breakdown for this Question */}
+                    {/* Criteria Scores for this question */}
                     {a && (
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-mono text-xs">
-                        <div className="p-2.5 rounded-lg bg-[#FFFDF9] dark:bg-[#1C1916] border border-[#DED9D0] dark:border-[#332F2A] text-center">
-                          <span className="text-[#68645E] dark:text-[#9E988F] block text-[10px]">Technical</span>
-                          <strong className="text-[#3F6B52] dark:text-[#88BA9D] font-bold">{a.criteriaScores?.technicalCorrectness} / 40</strong>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                        <div className="bg-white border border-slate-200 p-2.5 rounded text-center">
+                          <span className="text-slate-500 block text-[11px]">Relevance</span>
+                          <strong className="text-slate-800 font-bold">
+                            {a.criteriaScores?.relevance ?? score10}/10
+                          </strong>
                         </div>
-                        <div className="p-2.5 rounded-lg bg-[#FFFDF9] dark:bg-[#1C1916] border border-[#DED9D0] dark:border-[#332F2A] text-center">
-                          <span className="text-[#68645E] dark:text-[#9E988F] block text-[10px]">Relevance</span>
-                          <strong className="text-[#7A263A] dark:text-[#D4AA6A] font-bold">{a.criteriaScores?.relevance} / 20</strong>
+                        <div className="bg-white border border-slate-200 p-2.5 rounded text-center">
+                          <span className="text-slate-500 block text-[11px]">Correctness</span>
+                          <strong className="text-slate-800 font-bold">
+                            {a.criteriaScores?.correctness ?? score10}/10
+                          </strong>
                         </div>
-                        <div className="p-2.5 rounded-lg bg-[#FFFDF9] dark:bg-[#1C1916] border border-[#DED9D0] dark:border-[#332F2A] text-center">
-                          <span className="text-[#68645E] dark:text-[#9E988F] block text-[10px]">Completeness</span>
-                          <strong className="text-[#A66A24] dark:text-[#DEAC74] font-bold">{a.criteriaScores?.completeness} / 20</strong>
+                        <div className="bg-white border border-slate-200 p-2.5 rounded text-center">
+                          <span className="text-slate-500 block text-[11px]">Completeness</span>
+                          <strong className="text-slate-800 font-bold">
+                            {a.criteriaScores?.completeness ?? Math.max(1, score10 - 1)}/10
+                          </strong>
                         </div>
-                        <div className="p-2.5 rounded-lg bg-[#FFFDF9] dark:bg-[#1C1916] border border-[#DED9D0] dark:border-[#332F2A] text-center">
-                          <span className="text-[#68645E] dark:text-[#9E988F] block text-[10px]">Clarity</span>
-                          <strong className="text-[#C59A5B] dark:text-[#D4AA6A] font-bold">{a.criteriaScores?.clarity} / 20</strong>
+                        <div className="bg-white border border-slate-200 p-2.5 rounded text-center">
+                          <span className="text-slate-500 block text-[11px]">Technical Accuracy</span>
+                          <strong className="text-slate-800 font-bold">
+                            {a.criteriaScores?.technicalAccuracy ?? score10}/10
+                          </strong>
                         </div>
                       </div>
                     )}
 
-                    {/* Concepts Covered vs Missing */}
+                    {/* Correct & Missing Points */}
                     {a && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono">
-                        <div className="p-3 rounded-lg bg-[#EFF5F1] dark:bg-[#3F6B52]/20 border border-[#C2D9CB] dark:border-[#3F6B52]/40">
-                          <span className="font-semibold text-[#3F6B52] dark:text-[#88BA9D] flex items-center gap-1.5 mb-1.5 text-[11px]">
-                            <Check className="w-3.5 h-3.5" /> CONCEPTS DEMONSTRATED:
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        <div className="p-3.5 bg-green-50 border border-green-200 rounded-lg space-y-1.5">
+                          <span className="font-bold text-green-800 flex items-center gap-1.5">
+                            <CheckCircle className="w-4 h-4 text-green-600" />
+                            Correct Points:
                           </span>
-                          <ul className="list-disc list-inside text-[#171717] dark:text-[#F7F4EE] space-y-0.5 text-[11px]">
-                            {a.correctConcepts?.map((c, i) => (
-                              <li key={i}>{c}</li>
+                          <ul className="list-disc list-inside text-green-900 space-y-0.5">
+                            {(a.correctPoints || a.correctConcepts || []).map((pt, i) => (
+                              <li key={i}>{pt}</li>
                             ))}
                           </ul>
                         </div>
 
-                        <div className="p-3 rounded-lg bg-[#FBF5EC] dark:bg-[#A66A24]/20 border border-[#E8D5BE] dark:border-[#A66A24]/40">
-                          <span className="font-semibold text-[#A66A24] dark:text-[#DEAC74] flex items-center gap-1.5 mb-1.5 text-[11px]">
-                            <AlertCircle className="w-3.5 h-3.5" /> MISSING CONCEPTS & HAZARDS:
+                        <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg space-y-1.5">
+                          <span className="font-bold text-amber-800 flex items-center gap-1.5">
+                            <AlertCircle className="w-4 h-4 text-amber-600" />
+                            Missing Points:
                           </span>
-                          <ul className="list-disc list-inside text-[#171717] dark:text-[#F7F4EE] space-y-0.5 text-[11px]">
-                            {a.missingConcepts?.map((c, i) => (
-                              <li key={i}>{c}</li>
+                          <ul className="list-disc list-inside text-amber-900 space-y-0.5">
+                            {(a.missingPoints || a.missingConcepts || []).map((pt, i) => (
+                              <li key={i}>{pt}</li>
                             ))}
                           </ul>
                         </div>
                       </div>
                     )}
 
-                    {/* Interviewer Constructive Feedback */}
-                    {a?.feedback && (
-                      <div className="p-3 rounded-lg bg-[#FFFDF9] dark:bg-[#1C1916] border border-[#DED9D0] dark:border-[#332F2A]">
-                        <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-[#68645E] dark:text-[#9E988F] block mb-1">
-                          EXPERT DIAGNOSTIC CRITIQUE:
+                    {/* Incorrect Points */}
+                    {a && (a.incorrectPoints || a.mistakes || []).length > 0 && (
+                      <div className="p-3.5 bg-red-50 border border-red-200 rounded-lg space-y-1 text-xs">
+                        <span className="font-bold text-red-800 flex items-center gap-1.5">
+                          <AlertCircle className="w-4 h-4 text-red-600" />
+                          Incorrect Points:
                         </span>
-                        <p className="text-xs text-[#171717] dark:text-[#F7F4EE] leading-relaxed">
-                          {a.feedback}
-                        </p>
+                        <ul className="list-disc list-inside text-red-900 space-y-0.5">
+                          {(a.incorrectPoints || a.mistakes || []).map((pt, i) => (
+                            <li key={i}>{pt}</li>
+                          ))}
+                        </ul>
                       </div>
                     )}
 
-                    {/* Exemplar / Model Answer */}
+                    {/* Improvement Advice */}
+                    {a?.improvement && (
+                      <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-lg text-xs space-y-1">
+                        <span className="font-bold text-blue-800 flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                          How to Improve:
+                        </span>
+                        <p className="text-blue-900 leading-relaxed">{a.improvement}</p>
+                      </div>
+                    )}
+
+                    {/* Exemplar Model Answer */}
                     {a?.improvedAnswer && (
-                      <div className="p-3.5 rounded-lg bg-[#FAF0F2] dark:bg-[#7A263A]/15 border border-[#E8C5CC] dark:border-[#7A263A]/30">
-                        <span className="font-mono text-[10px] font-bold text-[#7A263A] dark:text-[#E8A5B2] uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
-                          <Terminal className="w-3.5 h-3.5" /> EXEMPLAR BENCHMARK RESPONSE:
+                      <div className="p-3.5 bg-white border border-slate-200 rounded-lg text-xs space-y-1">
+                        <span className="font-semibold text-slate-700 block">
+                          Reference Exemplar Answer:
                         </span>
-                        <p className="text-xs text-[#171717] dark:text-[#F7F4EE] leading-relaxed font-sans">
-                          {a.improvedAnswer}
-                        </p>
+                        <p className="text-slate-600 leading-relaxed">{a.improvedAnswer}</p>
                       </div>
                     )}
                   </div>
@@ -418,34 +363,31 @@ export const InterviewResultsPage = () => {
         </div>
       </div>
 
-      {/* Academic Disclaimer Card */}
-      <div className="p-4 rounded-xl border border-[#DED9D0] dark:border-[#332F2A] bg-[#FFFDF9] dark:bg-[#1C1916] text-xs text-[#68645E] dark:text-[#9E988F] flex items-start gap-3 shadow-paper">
-        <ShieldAlert className="w-4 h-4 text-[#7A263A] dark:text-[#D4AA6A] shrink-0 mt-0.5" />
-        <div className="text-[11px] leading-relaxed">
-          <strong className="text-[#171717] dark:text-[#F7F4EE] font-semibold block mb-0.5">
-            Academic Evaluation & Ethical Integrity Protocol
-          </strong>
-          MockVue scores answers strictly through calibrated 4-tier rubric matrices (Technical 40%, Relevance 20%, Completeness 20%, Clarity 20%). Video proctoring is evaluated client-side in RAM and never stored as raw media.
-        </div>
-      </div>
-
-      {/* Post-Interview Navigation */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-[#DED9D0] dark:border-[#332F2A]">
-        <Link to="/dashboard">
-          <Button variant="secondary" size="md" icon={Compass}>
-            Return to Workspace
-          </Button>
+      {/* Navigation Footer */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-200">
+        <Link
+          to="/dashboard"
+          className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs px-4 py-2 rounded transition-colors"
+        >
+          <Compass className="w-4 h-4" />
+          Back to Dashboard
         </Link>
-        <div className="flex items-center gap-2.5">
-          <Link to="/history">
-            <Button variant="outline" size="md" icon={BookOpen}>
-              Assessment History
-            </Button>
+
+        <div className="flex items-center gap-2">
+          <Link
+            to="/history"
+            className="inline-flex items-center gap-2 border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium text-xs px-4 py-2 rounded transition-colors"
+          >
+            <BookOpen className="w-4 h-4" />
+            Interview History
           </Link>
-          <Link to="/interviews/new">
-            <Button size="md" icon={Plus}>
-              New Assessment
-            </Button>
+
+          <Link
+            to="/interviews/new"
+            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs px-4 py-2 rounded transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Start New Interview
           </Link>
         </div>
       </div>

@@ -29,9 +29,20 @@ export class AIProvider {
    * @param {string[]} data.referenceConcepts
    * @param {string[]} data.evaluationCriteria
    * @param {string} data.candidateAnswer
-   * @returns {Promise<{ overallScore: number, criteriaScores: Object, feedback: string, improvedAnswer: string, isFallback: boolean }>}
+   * @returns {Promise<{ overallScore: number, scoreOutOf10: number, criteriaScores: Object, correctPoints: string[], missingPoints: string[], incorrectPoints: string[], improvement: string, feedback: string, improvedAnswer: string, isFallback: boolean }>}
    */
   async evaluateAnswer(data) {
     throw new Error('evaluateAnswer() must be implemented by concrete AI provider');
+  }
+
+  /**
+   * Transcribes candidate audio into text.
+   * @param {Object} data
+   * @param {string} data.audioBase64
+   * @param {string} [data.mimeType]
+   * @returns {Promise<{ transcript: string, provider: string, isFallback: boolean }>}
+   */
+  async transcribeAudio(data) {
+    throw new Error('transcribeAudio() must be implemented by concrete AI provider');
   }
 }

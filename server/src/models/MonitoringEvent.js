@@ -17,17 +17,14 @@ const monitoringEventSchema = new mongoose.Schema(
     eventType: {
       type: String,
       enum: [
-        'no_face_detected',
-        'person_out_of_frame',
-        'multiple_faces_detected',
-        'head_turned_away',
-        'looking_off_screen',
-        'eye_gaze_deviated',
         'tab_switched',
         'window_blurred',
         'fullscreen_exit',
-        'keyboard_shortcut_violation',
-        'audio_anomaly_detected',
+        'session_interrupted',
+        'no_face_detected',
+        'multiple_faces_detected',
+        'looking_away',
+        'left_frame',
         'camera_disconnected',
         'proctoring_violation',
         'max_warnings_exceeded'

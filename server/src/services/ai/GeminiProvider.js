@@ -59,45 +59,60 @@ export class GeminiProvider extends AIProvider {
     const { questionText, referenceConcepts = [], evaluationCriteria = [], candidateAnswer = '', topic = '' } = data;
 
     const prompt = `
-You are an expert technical interviewer evaluating a placement candidate's response.
+You are an expert technical interviewer evaluating a student's answer in a technical interview.
 
 INTERVIEW QUESTION:
 "${questionText}"
 
 TOPIC: "${topic}"
 
-EXPECTED REFERENCE CONCEPTS:
+EXPECTED CORE CONCEPTS:
 ${JSON.stringify(referenceConcepts)}
 
 EVALUATION CRITERIA:
 ${JSON.stringify(evaluationCriteria)}
 
-CANDIDATE'S SUBMITTED RESPONSE:
+STUDENT'S SUBMITTED TRANSCRIPT:
 "${candidateAnswer}"
 
-EVALUATION RUBRIC (Strict 0 to 100 Scale):
-1. Technical Correctness (Max 40 points): Accuracy of algorithmic explanation and conceptual integrity.
-2. Relevance (Max 20 points): Directly answers what was asked without dodging or filler.
-3. Completeness (Max 20 points): Covers expected reference concepts, complexity, and edge cases.
-4. Clarity & Structure (Max 20 points): Professional communication, terminology, and logical organization.
+CRITICAL EVALUATION RULES:
+1. Base your evaluation strictly on the ACTUAL QUESTION asked.
+2. Evaluate semantic understanding: If the student explains the concept correctly using their own words or acceptable alternative phrasing, award high marks. Do NOT penalize for not using exact keyword matches.
+   Example: If asked "What is inheritance in OOP?" and student says "Inheritance allows a child class to acquire properties and methods from a parent class", this is correct and should receive a high score (~8-9/10).
+3. If the answer is completely irrelevant, nonsensical, evasive ("I don't know", random gibberish), assign low scores (0-2/10).
+4. Evaluate these dimensions on a 0 to 10 scale:
+   - Relevance (0-10): Does the answer actually answer the question?
+   - Correctness (0-10): Are the statements factually and technically correct?
+   - Completeness (0-10): Did the student cover the important concepts?
+   - Technical Accuracy (0-10): Correct computer science terminology and mechanics.
+   - Quality (0-10): Is the explanation logical and understandable?
 
 OUTPUT FORMAT:
-Respond ONLY with valid JSON. Schema:
+Respond ONLY with valid JSON.
 {
-  "overallScore": 85,
+  "scoreOutOf10": 8,
+  "overallScore": 80,
   "criteriaScores": {
-    "technicalCorrectness": 35,
-    "relevance": 18,
-    "completeness": 16,
+    "relevance": 9,
+    "correctness": 8,
+    "completeness": 7,
+    "technicalAccuracy": 8,
+    "quality": 8,
+    "technicalCorrectness": 32,
     "clarity": 16
   },
-  "correctConcepts": ["Concept A", "Concept B"],
-  "missingConcepts": ["Concept C"],
-  "mistakes": ["Identified misconception if any"],
-  "explanation": "Concise summary of candidate performance",
-  "feedback": "Actionable feedback for real interview rounds",
-  "improvedAnswer": "An exemplary, gold-standard response for this question",
-  "recommendedTopics": ["Topic to study"]
+  "correctPoints": [
+    "What the student explained correctly"
+  ],
+  "missingPoints": [
+    "Important concepts that were not mentioned"
+  ],
+  "incorrectPoints": [
+    "Any technically incorrect statements (or empty if none)"
+  ],
+  "improvement": "Constructive advice on how the student could improve their answer",
+  "feedback": "Concise summary critique of the answer",
+  "improvedAnswer": "Gold-standard model answer for this specific question"
 }
 `.trim();
 
@@ -123,10 +138,104 @@ Respond ONLY with valid JSON. Schema:
     const rawText = resData?.candidates?.[0]?.content?.parts?.[0]?.text;
     const parsed = cleanAndParseJSON(rawText);
 
+    const scoreOutOf10 = typeof parsed.scoreOutOf10 === 'number'
+      ? Math.max(0, Math.min(10, Math.round(parsed.scoreOutOf10)))
+      : Math.round((parsed.overallScore || 70) / 10);
+
+    const overallScore = typeof parsed.overallScore === 'number'
+      ? Math.max(0, Math.min(100, Math.round(parsed.overallScore)))
+      : scoreOutOf10 * 10;
+
+    const correctPoints = Array.isArray(parsed.correctPoints) && parsed.correctPoints.length > 0
+      ? parsed.correctPoints
+      : (Array.isArray(parsed.correctConcepts) ? parsed.correctConcepts : ['Demonstrated foundational understanding of the concept']);
+
+    const missingPoints = Array.isArray(parsed.missingPoints)
+      ? parsed.missingPoints
+      : (Array.isArray(parsed.missingConcepts) ? parsed.missingConcepts : []);
+
+    const incorrectPoints = Array.isArray(parsed.incorrectPoints)
+      ? parsed.incorrectPoints
+      : (Array.isArray(parsed.mistakes) ? parsed.mistakes : []);
+
+    const criteriaScores = {
+      relevance: parsed.criteriaScores?.relevance ?? scoreOutOf10,
+      correctness: parsed.criteriaScores?.correctness ?? scoreOutOf10,
+      completeness: parsed.criteriaScores?.completeness ?? Math.max(1, scoreOutOf10 - 1),
+      technicalAccuracy: parsed.criteriaScores?.technicalAccuracy ?? scoreOutOf10,
+      quality: parsed.criteriaScores?.quality ?? scoreOutOf10,
+      technicalCorrectness: parsed.criteriaScores?.technicalCorrectness ?? Math.round(scoreOutOf10 * 4),
+      clarity: parsed.criteriaScores?.clarity ?? Math.round(scoreOutOf10 * 2),
+    };
+
     return {
       ...parsed,
+      scoreOutOf10,
+      overallScore,
+      criteriaScores,
+      correctPoints,
+      missingPoints,
+      incorrectPoints,
+      correctConcepts: correctPoints,
+      missingConcepts: missingPoints,
+      mistakes: incorrectPoints,
+      improvement: parsed.improvement || 'Elaborate on edge cases and provide code examples.',
+      feedback: parsed.feedback || parsed.explanation || 'Good effort on the explanation.',
+      improvedAnswer: parsed.improvedAnswer || '',
       isFallback: false,
       provider: 'gemini',
+    };
+  }
+
+  async transcribeAudio(data) {
+    if (!this.apiKey) {
+      throw new Error('Gemini API key is not configured.');
+    }
+    const { audioBase64, mimeType = 'audio/webm' } = data;
+    if (!audioBase64) {
+      throw new Error('No audio data provided for transcription.');
+    }
+
+    const base64Data = audioBase64.replace(/^data:audio\/[a-zA-Z0-9.+_-]+;base64,/, '');
+    const cleanMime = mimeType.split(';')[0] || 'audio/webm';
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                inline_data: {
+                  mime_type: cleanMime,
+                  data: base64Data,
+                },
+              },
+              {
+                text: "You are an expert speech-to-text transcription engine. Transcribe the candidate's speech accurately word-for-word. Capture Indian English pronunciation and technical terms accurately (e.g. JavaScript, React, Node.js, Express, MongoDB, SQL, OOP, inheritance, polymorphism, encapsulation, abstraction, API, REST, async/await, recursion, Big O). Do not skip words or sentences during pauses. Return ONLY the verbatim transcribed text without any timestamps or explanations.",
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.1,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errBody = await response.text();
+      throw new Error(`Gemini transcription error [${response.status}]: ${errBody.slice(0, 200)}`);
+    }
+
+    const resData = await response.json();
+    const transcript = resData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    return {
+      transcript,
+      provider: 'gemini',
+      isFallback: false,
     };
   }
 }

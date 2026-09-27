@@ -70,13 +70,13 @@ async function runProctoringTest() {
   await request(`/interviews/${interviewId}/start`, 'POST', {}, token);
   console.log('   ✓ Interview transitioned to in_progress.');
 
-  // 4. Log monitoring events (camera & tab switch & fullscreen_exit)
+  // 4. Log monitoring events (tab switch & fullscreen_exit)
   const monRes1 = await request(`/interviews/${interviewId}/monitoring`, 'POST', {
-    eventType: 'camera_disconnected',
+    eventType: 'tab_switched',
     confidence: 0.95,
-    description: 'Webcam feed disconnected unexpectedly.',
+    description: 'Candidate switched tabs or blurred browser window.',
   }, token);
-  console.log('   ✓ Logged camera_disconnected to /api/interviews/:id/monitoring.');
+  console.log('   ✓ Logged tab_switched to /api/interviews/:id/monitoring.');
 
   const monRes2 = await request(`/interviews/${interviewId}/monitoring`, 'POST', {
     eventType: 'fullscreen_exit',

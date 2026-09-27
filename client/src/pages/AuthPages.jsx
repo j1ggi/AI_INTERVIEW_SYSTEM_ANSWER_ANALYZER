@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Mail, Lock, User, AlertCircle, ShieldCheck } from 'lucide-react';
-import { Button } from '../components/ui/Button';
-import { Card } from '../components/ui/Card';
+import { ArrowRight, Mail, Lock, User, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const LoginPage = () => {
@@ -13,7 +11,6 @@ export const LoginPage = () => {
   const { login, register: authRegister, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
-  // If already logged in, redirect directly to dashboard
   useEffect(() => {
     if (isAuthenticated) {
       navigate('/dashboard', { replace: true });
@@ -53,7 +50,6 @@ export const LoginPage = () => {
       await login(demoEmail, demoPassword);
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      // If demo user wasn't registered in DB, auto-register and sign in
       try {
         await authRegister({
           name: demoEmail.split('@')[0],
@@ -63,157 +59,105 @@ export const LoginPage = () => {
         });
         navigate('/dashboard', { replace: true });
       } catch (regErr) {
-        setError(regErr.message || 'Authentication failed. Please check credentials.');
+        setError(regErr.message || 'Authentication failed.');
       }
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleAutoRegister = async () => {
-    if (!email) return;
-    setIsLoading(true);
-    setError('');
-
-    try {
-      await authRegister({
-        name: email.split('@')[0],
-        email,
-        password: password || 'password123',
-        targetRole: 'Software Development Engineer',
-      });
-      navigate('/dashboard', { replace: true });
-    } catch (err) {
-      setError(err.message || 'Auto-registration failed. Please check information.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
-    <div className="min-h-[82vh] flex items-center justify-center px-4 py-14">
-      <Card className="w-full max-w-md p-6 sm:p-8">
-        <div className="text-center mb-6">
-          <div className="inline-flex w-10 h-10 rounded-[8px] bg-[#7A263A] text-white items-center justify-center mb-3 shadow-sm border border-[#C59A5B]/40">
-            <span className="font-serif font-bold text-lg">M</span>
+    <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
+      <div className="w-full max-w-md bg-white border border-slate-200 rounded-lg p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="text-center space-y-1">
+          <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-lg mx-auto mb-2 shadow-sm">
+            M
           </div>
-          <h2 className="text-xl sm:text-2xl font-serif font-bold tracking-tight text-[#171717] dark:text-[#F7F4EE]">
-            Candidate Authentication
-          </h2>
-          <p className="text-xs text-[#68645E] dark:text-[#9E988F] mt-1 font-mono uppercase tracking-wider">
-            PLACEMENT EVALUATION PORTAL
-          </p>
+          <h2 className="text-2xl font-bold text-slate-900">Student Sign In</h2>
+          <p className="text-xs text-slate-500">Sign in to your MockVue interview account</p>
         </div>
 
-        {/* Fast-Track Demo Credentials Accordion */}
-        <div className="mb-5 p-3 rounded-[10px] border border-[#DED9D0] dark:border-[#332F2A] bg-[#F0ECE4]/70 dark:bg-[#24201C]/70">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-mono uppercase tracking-wider text-[#68645E] dark:text-[#9E988F] font-semibold flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-[#3F6B52]" />
-              Verified Demo Access
-            </span>
-            <span className="text-[10px] font-mono text-[#7A263A] dark:text-[#D4AA6A] font-medium">
-              1-Click Sign-in
-            </span>
-          </div>
+        {/* Demo Accounts Quick-Fill Box */}
+        <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+          <span className="text-[11px] font-semibold text-slate-600 block">
+            Demo Credentials (1-Click Login):
+          </span>
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               disabled={isLoading}
               onClick={() => handleFastLogin('megenta.point@gmail.com', 'password123')}
-              className="text-left p-2.5 rounded-[8px] border border-[#DED9D0] dark:border-[#332F2A] bg-[#FFFDF9] dark:bg-[#1C1916] hover:border-[#7A263A]/70 hover:shadow-sm transition-all group"
+              className="text-left p-2 rounded bg-white border border-slate-200 hover:border-blue-400 text-xs transition-colors"
             >
-              <div className="text-[11px] font-medium text-[#171717] dark:text-[#F7F4EE] truncate group-hover:text-[#7A263A] dark:group-hover:text-[#D4AA6A]">
-                megenta.point@gmail.com
-              </div>
-              <div className="text-[10px] font-mono text-[#68645E] dark:text-[#9E988F] mt-0.5">
-                pwd: password123
-              </div>
+              <div className="font-medium text-slate-900 truncate">megenta.point@gmail.com</div>
+              <div className="text-[10px] text-slate-400">pwd: password123</div>
             </button>
             <button
               type="button"
               disabled={isLoading}
-              onClick={() => handleFastLogin('candidate@mockvue.edu', 'password123')}
-              className="text-left p-2.5 rounded-[8px] border border-[#DED9D0] dark:border-[#332F2A] bg-[#FFFDF9] dark:bg-[#1C1916] hover:border-[#7A263A]/70 hover:shadow-sm transition-all group"
+              onClick={() => handleFastLogin('student@college.edu', 'password123')}
+              className="text-left p-2 rounded bg-white border border-slate-200 hover:border-blue-400 text-xs transition-colors"
             >
-              <div className="text-[11px] font-medium text-[#171717] dark:text-[#F7F4EE] truncate group-hover:text-[#7A263A] dark:group-hover:text-[#D4AA6A]">
-                candidate@mockvue.edu
-              </div>
-              <div className="text-[10px] font-mono text-[#68645E] dark:text-[#9E988F] mt-0.5">
-                pwd: password123
-              </div>
+              <div className="font-medium text-slate-900 truncate">student@college.edu</div>
+              <div className="text-[10px] text-slate-400">pwd: password123</div>
             </button>
           </div>
         </div>
 
         {error && (
-          <div className="mb-5 p-3.5 rounded-[10px] bg-[#FAF0F0] dark:bg-[#A33B3B]/15 border border-[#E8C4C4] dark:border-[#A33B3B]/40 text-xs text-[#A33B3B] dark:text-[#E59797]">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{error}</span>
-            </div>
-            {email && (
-              <div className="mt-2.5 pt-2 border-t border-[#E8C4C4] dark:border-[#A33B3B]/30">
-                <button
-                  type="button"
-                  onClick={handleAutoRegister}
-                  className="w-full py-1.5 px-3 rounded-[6px] bg-[#A33B3B]/10 hover:bg-[#A33B3B]/20 text-[#A33B3B] dark:text-[#E59797] font-mono text-[11px] border border-[#E8C4C4] dark:border-[#A33B3B]/40 text-center font-semibold transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <span>Auto-Register & Sign In as {email}</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
+          <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
           </div>
         )}
 
         <form onSubmit={(e) => handleLogin(e)} className="space-y-4">
-          <div>
-            <label className="block text-xs font-mono font-medium text-[#171717] dark:text-[#F7F4EE] uppercase tracking-wider mb-1.5">
-              Institutional Email
-            </label>
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-slate-700">Email Address</label>
             <div className="relative">
-              <Mail className="w-4 h-4 text-[#68645E] dark:text-[#9E988F] absolute left-3 top-1/2 -translate-y-1/2" />
+              <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="candidate@mockvue.edu"
-                className="w-full pl-9 pr-3.5 py-2.5 rounded-[10px] border border-[#DED9D0] dark:border-[#332F2A] bg-[#F7F4EE] dark:bg-[#24201C] text-[#171717] dark:text-[#F7F4EE] text-sm focus:outline-none focus:border-[#7A263A] focus:ring-1 focus:ring-[#7A263A]/20 font-mono"
+                placeholder="student@college.edu"
+                className="w-full pl-9 pr-3.5 py-2 border border-slate-300 rounded text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-mono font-medium text-[#171717] dark:text-[#F7F4EE] uppercase tracking-wider mb-1.5">
-              Access Password
-            </label>
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-slate-700">Password</label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-[#68645E] dark:text-[#9E988F] absolute left-3 top-1/2 -translate-y-1/2" />
+              <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full pl-9 pr-3.5 py-2.5 rounded-[10px] border border-[#DED9D0] dark:border-[#332F2A] bg-[#F7F4EE] dark:bg-[#24201C] text-[#171717] dark:text-[#F7F4EE] text-sm focus:outline-none focus:border-[#7A263A] focus:ring-1 focus:ring-[#7A263A]/20"
+                placeholder="Enter password"
+                className="w-full pl-9 pr-3.5 py-2 border border-slate-300 rounded text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           </div>
 
-          <Button type="submit" isLoading={isLoading} className="w-full mt-2 font-medium" size="md">
-            Sign In to Session
-          </Button>
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-medium text-sm py-2.5 rounded shadow-sm transition-colors"
+          >
+            {isLoading ? 'Signing In...' : 'Sign In'}
+          </button>
         </form>
 
-        <p className="text-center text-xs text-[#68645E] dark:text-[#9E988F] mt-6 font-mono">
-          First time?{' '}
-          <Link to="/register" className="text-[#7A263A] dark:text-[#D4AA6A] font-semibold hover:underline">
-            Register Candidate Account
+        <p className="text-center text-xs text-slate-500">
+          Don't have an account?{' '}
+          <Link to="/register" className="text-blue-600 font-semibold hover:underline">
+            Register here
           </Link>
         </p>
-      </Card>
+      </div>
     </div>
   );
 };
@@ -228,7 +172,6 @@ export const RegisterPage = () => {
   const { register: authRegister, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
-  // If already logged in, redirect directly to dashboard
   useEffect(() => {
     if (isAuthenticated) {
       navigate('/dashboard', { replace: true });
@@ -244,115 +187,110 @@ export const RegisterPage = () => {
       await authRegister({ name, email, password, targetRole });
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      setError(err.message || 'Registration failed. Please check your information.');
+      setError(err.message || 'Registration failed.');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-[82vh] flex items-center justify-center px-4 py-14">
-      <Card className="w-full max-w-md p-6 sm:p-8">
-        <div className="text-center mb-6">
-          <div className="inline-flex w-10 h-10 rounded-[8px] bg-[#7A263A] text-white items-center justify-center mb-3 shadow-sm border border-[#C59A5B]/40">
-            <span className="font-serif font-bold text-lg">M</span>
+    <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
+      <div className="w-full max-w-md bg-white border border-slate-200 rounded-lg p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="text-center space-y-1">
+          <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-lg mx-auto mb-2 shadow-sm">
+            M
           </div>
-          <h2 className="text-xl sm:text-2xl font-serif font-bold tracking-tight text-[#171717] dark:text-[#F7F4EE]">
-            Create Candidate Dossier
-          </h2>
-          <p className="text-xs text-[#68645E] dark:text-[#9E988F] mt-1 font-mono uppercase tracking-wider">
-            TECHNICAL PLACEMENT TRACK ENROLLMENT
-          </p>
+          <h2 className="text-2xl font-bold text-slate-900">Create Student Account</h2>
+          <p className="text-xs text-slate-500">Sign up to practice technical placement interviews</p>
         </div>
 
         {error && (
-          <div className="mb-5 p-3.5 rounded-[10px] bg-[#FAF0F0] dark:bg-[#A33B3B]/15 border border-[#E8C4C4] dark:border-[#A33B3B]/40 text-xs text-[#A33B3B] dark:text-[#E59797] flex items-center gap-2.5">
+          <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
         <form onSubmit={handleRegister} className="space-y-4">
-          <div>
-            <label className="block text-xs font-mono font-medium text-[#171717] dark:text-[#F7F4EE] uppercase tracking-wider mb-1.5">
-              Full Legal Name
-            </label>
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-slate-700">Full Name</label>
             <div className="relative">
-              <User className="w-4 h-4 text-[#68645E] dark:text-[#9E988F] absolute left-3 top-1/2 -translate-y-1/2" />
+              <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Aarav Sharma"
-                className="w-full pl-9 pr-3.5 py-2.5 rounded-[10px] border border-[#DED9D0] dark:border-[#332F2A] bg-[#F7F4EE] dark:bg-[#24201C] text-[#171717] dark:text-[#F7F4EE] text-sm focus:outline-none focus:border-[#7A263A] focus:ring-1 focus:ring-[#7A263A]/20"
+                placeholder="Rohan Sharma"
+                className="w-full pl-9 pr-3.5 py-2 border border-slate-300 rounded text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-mono font-medium text-[#171717] dark:text-[#F7F4EE] uppercase tracking-wider mb-1.5">
-              Institutional Email
-            </label>
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-slate-700">Email Address</label>
             <div className="relative">
-              <Mail className="w-4 h-4 text-[#68645E] dark:text-[#9E988F] absolute left-3 top-1/2 -translate-y-1/2" />
+              <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="student@college.edu"
-                className="w-full pl-9 pr-3.5 py-2.5 rounded-[10px] border border-[#DED9D0] dark:border-[#332F2A] bg-[#F7F4EE] dark:bg-[#24201C] text-[#171717] dark:text-[#F7F4EE] text-sm focus:outline-none focus:border-[#7A263A] focus:ring-1 focus:ring-[#7A263A]/20 font-mono"
+                className="w-full pl-9 pr-3.5 py-2 border border-slate-300 rounded text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-mono font-medium text-[#171717] dark:text-[#F7F4EE] uppercase tracking-wider mb-1.5">
-              Access Password
-            </label>
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-slate-700">Password</label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-[#68645E] dark:text-[#9E988F] absolute left-3 top-1/2 -translate-y-1/2" />
+              <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Minimum 6 characters"
-                className="w-full pl-9 pr-3.5 py-2.5 rounded-[10px] border border-[#DED9D0] dark:border-[#332F2A] bg-[#F7F4EE] dark:bg-[#24201C] text-[#171717] dark:text-[#F7F4EE] text-sm focus:outline-none focus:border-[#7A263A] focus:ring-1 focus:ring-[#7A263A]/20"
+                className="w-full pl-9 pr-3.5 py-2 border border-slate-300 rounded text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-mono font-medium text-[#171717] dark:text-[#F7F4EE] uppercase tracking-wider mb-1.5">
-              Target Placement Track
-            </label>
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-slate-700">Target Job Role</label>
             <select
               value={targetRole}
               onChange={(e) => setTargetRole(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-[10px] border border-[#DED9D0] dark:border-[#332F2A] bg-[#F7F4EE] dark:bg-[#24201C] text-[#171717] dark:text-[#F7F4EE] text-sm focus:outline-none focus:border-[#7A263A] focus:ring-1 focus:ring-[#7A263A]/20"
+              className="w-full p-2 border border-slate-300 rounded text-sm bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="Software Development Engineer">Software Development Engineer (SDE)</option>
-              <option value="Frontend Developer">Frontend Developer (React/Web)</option>
-              <option value="Backend Developer">Backend Developer (Node/Java/Python)</option>
-              <option value="Full Stack Developer">Full Stack Developer (MERN/FullStack)</option>
-              <option value="Data Analyst">Data Analyst (SQL/Python/Analytics)</option>
+              <option value="Frontend Developer">Frontend Developer</option>
+              <option value="Backend Developer">Backend Developer</option>
+              <option value="Full Stack Developer">Full Stack Developer</option>
+              <option value="Data Analyst">Data Analyst</option>
+              <option value="Java Developer">Java Developer</option>
             </select>
           </div>
 
-          <Button type="submit" isLoading={isLoading} className="w-full mt-2 font-medium" size="md" icon={ArrowRight}>
-            Initialize Dossier
-          </Button>
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-medium text-sm py-2.5 rounded shadow-sm transition-colors"
+          >
+            {isLoading ? 'Creating Account...' : 'Create Account'}
+          </button>
         </form>
 
-        <p className="text-center text-xs text-[#68645E] dark:text-[#9E988F] mt-6 font-mono">
+        <p className="text-center text-xs text-slate-500">
           Already registered?{' '}
-          <Link to="/login" className="text-[#7A263A] dark:text-[#D4AA6A] font-semibold hover:underline">
-            Sign In
+          <Link to="/login" className="text-blue-600 font-semibold hover:underline">
+            Sign in
           </Link>
         </p>
-      </Card>
+      </div>
     </div>
   );
 };
+
+export default LoginPage;

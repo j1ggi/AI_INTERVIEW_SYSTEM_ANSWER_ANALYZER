@@ -22,7 +22,7 @@ const answerSchema = new mongoose.Schema(
     },
     responseType: {
       type: String,
-      enum: ['text', 'voice'],
+      enum: ['text', 'voice', 'audio'],
       default: 'text',
     },
     responseText: {
@@ -40,11 +40,39 @@ const answerSchema = new mongoose.Schema(
       max: 100,
       required: true,
     },
+    scoreOutOf10: {
+      type: Number,
+      min: 0,
+      max: 10,
+      default: 0,
+    },
     criteriaScores: {
-      technicalCorrectness: { type: Number, min: 0, max: 40, default: 0 },
-      relevance: { type: Number, min: 0, max: 20, default: 0 },
-      completeness: { type: Number, min: 0, max: 20, default: 0 },
-      clarity: { type: Number, min: 0, max: 20, default: 0 },
+      type: mongoose.Schema.Types.Mixed,
+      default: () => ({
+        relevance: 0,
+        correctness: 0,
+        completeness: 0,
+        technicalAccuracy: 0,
+        quality: 0,
+        technicalCorrectness: 0,
+        clarity: 0,
+      }),
+    },
+    correctPoints: {
+      type: [String],
+      default: [],
+    },
+    missingPoints: {
+      type: [String],
+      default: [],
+    },
+    incorrectPoints: {
+      type: [String],
+      default: [],
+    },
+    improvement: {
+      type: String,
+      default: '',
     },
     correctConcepts: {
       type: [String],

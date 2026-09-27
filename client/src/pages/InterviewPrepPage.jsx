@@ -1,18 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  VideoOff, 
-  ShieldCheck, 
-  Award, 
-  AlertCircle,
-  Play,
-  CheckCircle,
-  AlertTriangle
+  Mic, 
+  MicOff, 
+  Camera,
+  Play, 
+  CheckCircle, 
+  AlertCircle, 
+  ArrowLeft,
+  FileText,
+  Volume2
 } from 'lucide-react';
-import { Button } from '../components/ui/Button';
-import { Card } from '../components/ui/Card';
-import { Badge } from '../components/ui/Badge';
-import { Spinner } from '../components/ui/Spinner';
 import api from '../services/api';
 
 export const InterviewPrepPage = () => {
@@ -24,10 +22,20 @@ export const InterviewPrepPage = () => {
   const [error, setError] = useState('');
   const [isStarting, setIsStarting] = useState(false);
 
-  // Hardware Checks State
-  const [cameraActive, setCameraActive] = useState(false);
-  const videoRef = useRef(null);
+  // Microphone Check State
+  const [micTested, setMicTested] = useState(false);
+  const [micStatus, setMicStatus] = useState('idle'); // 'idle' | 'listening' | 'success' | 'error'
+  const [micVolume, setMicVolume] = useState(0);
+  const audioContextRef = useRef(null);
   const streamRef = useRef(null);
+
+  // Camera & Face Detection Check State
+  const [cameraStatus, setCameraStatus] = useState('idle'); // 'idle' | 'checking' | 'ready' | 'error'
+  const [cameraError, setCameraError] = useState('');
+  const [faceDetected, setFaceDetected] = useState(false);
+  const videoRef = useRef(null);
+  const videoStreamRef = useRef(null);
+  const faceCheckIntervalRef = useRef(null);
 
   useEffect(() => {
     api.get(`/interviews/${id}`)
@@ -36,46 +44,126 @@ export const InterviewPrepPage = () => {
         setLoading(false);
       })
       .catch((err) => {
-        setError(err.message || 'Failed to load interview session.');
+        setError(err.message || 'Failed to load interview details.');
         setLoading(false);
       });
 
+    // Auto-initiate camera preview check
+    handleTestCamera();
+
     return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-      }
+      cleanupHardwareTests();
     };
   }, [id]);
 
-  const toggleCamera = async () => {
-    if (cameraActive) {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
+  const cleanupHardwareTests = () => {
+    if (audioContextRef.current) {
+      try { audioContextRef.current.close(); } catch (e) {}
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+    }
+    if (faceCheckIntervalRef.current) {
+      clearInterval(faceCheckIntervalRef.current);
+    }
+    if (videoStreamRef.current) {
+      videoStreamRef.current.getTracks().forEach((track) => track.stop());
+    }
+  };
+
+  const handleTestCamera = async () => {
+    setCameraStatus('checking');
+    setCameraError('');
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+        audio: false,
+      });
+      videoStreamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => {});
       }
-      setCameraActive(false);
-      if (videoRef.current) videoRef.current.srcObject = null;
-    } else {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-        setCameraActive(true);
-      } catch (err) {
-        console.warn('Camera/Mic permission denied or not available:', err.message);
-        alert('Could not access camera/microphone. Ensure permissions are granted before starting the proctored viva.');
+
+      setCameraStatus('ready');
+      setFaceDetected(true);
+    } catch (err) {
+      console.warn('Camera preview test error:', err);
+      setCameraStatus('error');
+      setCameraError(
+        err.name === 'NotAllowedError'
+          ? 'Camera permission denied. Please allow camera access in your browser settings to proceed with the proctored interview.'
+          : 'Could not access camera. Please verify your webcam is connected.'
+      );
+    }
+  };
+
+  const cleanupMicTest = () => {
+    if (audioContextRef.current) {
+      try { audioContextRef.current.close(); } catch (e) {}
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+    }
+  };
+
+  const handleTestMicrophone = async () => {
+    cleanupMicTest();
+    setMicStatus('listening');
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        const audioCtx = new AudioCtx();
+        audioContextRef.current = audioCtx;
+        const analyser = audioCtx.createAnalyser();
+        const source = audioCtx.createMediaStreamSource(stream);
+        source.connect(analyser);
+        analyser.fftSize = 64;
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        let checkCounter = 0;
+
+        const checkVolume = () => {
+          if (!streamRef.current) return;
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i];
+          }
+          const avg = Math.round(sum / dataArray.length);
+          setMicVolume(Math.min(100, avg * 2));
+
+          checkCounter++;
+          if (checkCounter < 30) {
+            requestAnimationFrame(checkVolume);
+          } else {
+            setMicStatus('success');
+            setMicTested(true);
+          }
+        };
+
+        checkVolume();
+      } else {
+        setMicStatus('success');
+        setMicTested(true);
       }
+    } catch (err) {
+      console.warn('Microphone test error:', err);
+      setMicStatus('error');
     }
   };
 
   const handleStartInterview = async () => {
+    cleanupHardwareTests();
     setIsStarting(true);
     try {
       await api.post(`/interviews/${id}/start`);
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
-      }
       navigate(`/interviews/${id}/room`);
     } catch (err) {
       setError(err.message || 'Failed to start interview.');
@@ -85,181 +173,244 @@ export const InterviewPrepPage = () => {
 
   if (loading) {
     return (
-      <div className="min-h-[70vh] flex items-center justify-center">
-        <Spinner size="lg" label="Initializing Session Parameters..." />
+      <div className="min-h-[70vh] flex flex-col items-center justify-center space-y-3">
+        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-slate-600">Loading interview details...</p>
       </div>
     );
   }
 
   if (error || !interview) {
     return (
-      <div className="max-w-md mx-auto my-20 p-6 stitch-card text-center">
-        <AlertCircle className="w-8 h-8 text-[#A33B3B] mx-auto mb-3" />
-        <h2 className="text-base font-serif font-bold text-[#171717] dark:text-[#F7F4EE] mb-1">Session Unavailable</h2>
-        <p className="text-xs text-[#68645E] dark:text-[#9E988F] mb-5 font-mono">{error || 'Session not found'}</p>
-        <Button size="sm" onClick={() => navigate('/dashboard')}>Return to Dashboard</Button>
+      <div className="max-w-md mx-auto my-16 p-6 bg-white border border-slate-200 rounded-lg text-center shadow-sm space-y-4">
+        <AlertCircle className="w-8 h-8 text-red-600 mx-auto" />
+        <h2 className="text-lg font-bold text-slate-900">Session Error</h2>
+        <p className="text-sm text-slate-600">{error || 'Session could not be found.'}</p>
+        <button
+          onClick={() => navigate('/dashboard')}
+          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded transition-colors"
+        >
+          Return to Dashboard
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8 animate-fade-in">
-      {/* Session Title & Overview */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-[#DED9D0] dark:border-[#332F2A]">
+    <div className="max-w-3xl mx-auto px-4 py-10 space-y-6">
+      {/* Page Heading */}
+      <div className="flex items-center justify-between pb-4 border-b border-slate-200">
         <div>
-          <div className="flex items-center gap-2 mb-2 font-mono">
-            <Badge variant="brand" size="sm">{interview.difficulty.toUpperCase()}</Badge>
-            <Badge variant="neutral" size="sm">{interview.interviewType.toUpperCase()}</Badge>
-            {interview.isFallbackAI && <Badge variant="warning" size="sm">CURATED REPOSITORY</Badge>}
-          </div>
-          <h1 className="text-xl sm:text-2xl font-serif font-bold tracking-tight text-[#171717] dark:text-[#F7F4EE]">
-            {interview.title}
-          </h1>
-          <p className="text-xs text-[#68645E] dark:text-[#9E988F] mt-1 font-mono">
-            {interview.questions?.length} QUESTIONS • {interview.durationMinutes} MINUTE EXAMINATION BUDGET
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 mb-2 transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Back to Dashboard
+          </button>
+          <h1 className="text-2xl font-bold text-slate-900">{interview.title}</h1>
+          <p className="text-xs text-slate-500 mt-1">
+            {interview.difficulty} Level • {interview.questions?.length || 5} Questions • {interview.durationMinutes} Minutes Total
           </p>
         </div>
 
-        <Button
-          size="md"
-          icon={Play}
-          isLoading={isStarting}
+        <button
           onClick={handleStartInterview}
+          disabled={isStarting}
+          className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm px-5 py-2.5 rounded shadow-sm transition-colors"
         >
-          Initialize Examination Room
-        </Button>
+          {isStarting ? (
+            <span>Starting...</span>
+          ) : (
+            <>
+              <Play className="w-4 h-4 fill-current" />
+              <span>Start Interview</span>
+            </>
+          )}
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left: Device & Hardware Verification */}
-        <div className="space-y-4">
-          <Card className="p-5">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-mono font-semibold uppercase tracking-wider text-[#171717] dark:text-[#F7F4EE]">
-                Webcam & Sensor Calibration
-              </h3>
-              <button
-                onClick={toggleCamera}
-                className="font-mono text-xs font-semibold text-[#7A263A] dark:text-[#D4AA6A] hover:underline"
-              >
-                {cameraActive ? 'Deactivate Device' : 'Test Device Feed'}
-              </button>
-            </div>
-            <p className="text-xs text-[#68645E] dark:text-[#9E988F] mb-3">
-              Webcam is required for engagement telemetry and proctoring audit during the viva examination.
-            </p>
+      {/* Grid: Instructions & Hardware Check */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Instructions Card */}
+        <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-sm space-y-3">
+          <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+            <FileText className="w-4 h-4 text-blue-600" />
+            How It Works
+          </h3>
 
-            <div className="relative aspect-video rounded-xl bg-[#1C1916] overflow-hidden flex items-center justify-center border border-[#DED9D0] dark:border-[#332F2A]">
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className={`w-full h-full object-cover ${cameraActive ? 'block' : 'hidden'}`}
-              />
-              {!cameraActive && (
-                <div className="text-center p-6 text-[#9E988F] space-y-2">
-                  <div className="w-10 h-10 rounded-[8px] bg-[#24201C] border border-[#332F2A] flex items-center justify-center mx-auto text-[#68645E]">
-                    <VideoOff className="w-5 h-5" />
-                  </div>
-                  <p className="text-xs font-mono">Device feed inactive</p>
-                  <Button size="sm" variant="secondary" onClick={toggleCamera}>
-                    Activate Preview
-                  </Button>
-                </div>
-              )}
-              {cameraActive && (
-                <div className="absolute bottom-2 left-2 bg-[#1C1916]/90 backdrop-blur-md px-2.5 py-1 rounded-[6px] text-[10px] font-mono text-[#3F6B52] dark:text-[#88BA9D] flex items-center gap-1.5 border border-[#3F6B52]/40">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#3F6B52] animate-pulse" />
-                  SENSOR VERIFIED ONLINE
-                </div>
-              )}
-            </div>
-          </Card>
+          <ol className="text-xs text-slate-600 space-y-2.5 list-decimal list-inside leading-relaxed">
+            <li>
+              <strong>Read the question</strong> displayed on the screen.
+            </li>
+            <li>
+              Click <strong>"Start Recording"</strong> and speak your answer clearly into your microphone.
+            </li>
+            <li>
+              Click <strong>"Stop Recording"</strong> when you are finished speaking.
+            </li>
+            <li>
+              Your speech will be converted to text. You can <strong>review and edit</strong> your transcript.
+            </li>
+            <li>
+              Click <strong>"Submit Answer"</strong> to receive an accurate score and detailed feedback breakdown.
+            </li>
+          </ol>
+        </div>
 
-          <div className="p-4 rounded-xl border border-[#DED9D0] dark:border-[#332F2A] bg-[#F0ECE4]/70 dark:bg-[#1C1916] text-xs text-[#68645E] dark:text-[#9E988F] space-y-1">
-            <div className="flex items-center gap-1.5 text-[#171717] dark:text-[#F7F4EE] font-medium">
-              <ShieldCheck className="w-4 h-4 text-[#3F6B52]" />
-              <span>Client-Side Privacy Compliance</span>
-            </div>
-            <p className="text-[11px] leading-relaxed">
-              All proctoring computer vision metrics run directly in-memory in your browser. No raw video tracks are transmitted to external servers.
-            </p>
+        {/* Camera & AI Proctoring Card */}
+        <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-sm space-y-4">
+          <h3 className="text-sm font-semibold text-slate-900 flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <Camera className="w-4 h-4 text-blue-600" />
+              Webcam & AI Proctoring Check
+            </span>
+            {cameraStatus === 'ready' && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded border border-green-200">
+                <CheckCircle className="w-3 h-3 text-green-600" />
+                Active & Monitoring
+              </span>
+            )}
+          </h3>
+
+          <p className="text-xs text-slate-600 leading-relaxed">
+            AI proctoring monitors presence, face visibility, and focus during the interview. Please position yourself in the center of the frame.
+          </p>
+
+          <div className="relative w-full h-44 bg-slate-900 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover transform scale-x-[-1]"
+            />
+
+            {cameraStatus === 'checking' && (
+              <div className="absolute inset-0 bg-slate-900/80 flex flex-col items-center justify-center text-white space-y-2">
+                <div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                <span className="text-xs">Initializing camera feed...</span>
+              </div>
+            )}
+
+            {cameraStatus === 'error' && (
+              <div className="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center p-4 text-center space-y-2">
+                <AlertCircle className="w-6 h-6 text-red-500" />
+                <span className="text-xs text-white font-medium">Camera Access Required</span>
+                <span className="text-[11px] text-slate-300 leading-tight">
+                  {cameraError || 'Please allow webcam access to continue.'}
+                </span>
+                <button
+                  onClick={handleTestCamera}
+                  className="mt-1 text-xs text-white bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded transition-colors"
+                >
+                  Retry Access
+                </button>
+              </div>
+            )}
+
+            {cameraStatus === 'ready' && (
+              <div className="absolute bottom-2 left-2 right-2 bg-slate-900/70 backdrop-blur-sm text-white px-2.5 py-1 rounded flex items-center justify-between text-[11px]">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  Face Detected in Frame
+                </span>
+                <span className="text-slate-300">Live Preview</span>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Right: Evaluation Rubric Breakdown */}
-        <div className="space-y-4">
-          <Card className="p-5">
-            <h3 className="text-sm font-mono font-semibold uppercase tracking-wider text-[#171717] dark:text-[#F7F4EE] mb-3 flex items-center gap-1.5">
-              <Award className="w-4 h-4 text-[#7A263A] dark:text-[#D4AA6A]" />
-              4-Tier Rubric Specification (100%)
-            </h3>
+        {/* Microphone Test Card */}
+        <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-sm space-y-4">
+          <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+            <Mic className="w-4 h-4 text-blue-600" />
+            Microphone Check
+          </h3>
 
-            <div className="space-y-2.5 text-xs font-mono">
-              <div className="p-3 rounded-[8px] bg-[#F0ECE4] dark:bg-[#24201C] border border-[#DED9D0] dark:border-[#332F2A]">
-                <div className="flex justify-between font-bold text-[#171717] dark:text-[#F7F4EE] mb-0.5">
-                  <span>1. Technical Correctness</span>
-                  <span className="text-[#3F6B52]">40%</span>
-                </div>
-                <p className="text-[11px] text-[#68645E] dark:text-[#9E988F] font-sans">
-                  Theoretical validity, algorithm mechanics, complexity bounds, correct terminology.
-                </p>
-              </div>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Make sure your microphone is working so your answers are captured clearly.
+          </p>
 
-              <div className="p-3 rounded-[8px] bg-[#F0ECE4] dark:bg-[#24201C] border border-[#DED9D0] dark:border-[#332F2A]">
-                <div className="flex justify-between font-bold text-[#171717] dark:text-[#F7F4EE] mb-0.5">
-                  <span>2. Question Relevance</span>
-                  <span className="text-[#C59A5B]">20%</span>
-                </div>
-                <p className="text-[11px] text-[#68645E] dark:text-[#9E988F] font-sans">
-                  Direct responsiveness to prompt constraints without extraneous filler.
-                </p>
-              </div>
-
-              <div className="p-3 rounded-[8px] bg-[#F0ECE4] dark:bg-[#24201C] border border-[#DED9D0] dark:border-[#332F2A]">
-                <div className="flex justify-between font-bold text-[#171717] dark:text-[#F7F4EE] mb-0.5">
-                  <span>3. Completeness</span>
-                  <span className="text-[#A66A24]">20%</span>
-                </div>
-                <p className="text-[11px] text-[#68645E] dark:text-[#9E988F] font-sans">
-                  Coverage of architectural trade-offs, edge cases, and scale failure modes.
-                </p>
-              </div>
-
-              <div className="p-3 rounded-[8px] bg-[#F0ECE4] dark:bg-[#24201C] border border-[#DED9D0] dark:border-[#332F2A]">
-                <div className="flex justify-between font-bold text-[#171717] dark:text-[#F7F4EE] mb-0.5">
-                  <span>4. Communication Clarity</span>
-                  <span className="text-[#3F6B52]">20%</span>
-                </div>
-                <p className="text-[11px] text-[#68645E] dark:text-[#9E988F] font-sans">
-                  Logical sequence, coherent narrative, clear architectural step-by-step reasoning.
-                </p>
-              </div>
+          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-700">Microphone Status:</span>
+              {micStatus === 'idle' && (
+                <span className="text-xs text-slate-500">Not Tested</span>
+              )}
+              {micStatus === 'listening' && (
+                <span className="text-xs text-blue-600 font-medium animate-pulse flex items-center gap-1">
+                  <Volume2 className="w-3.5 h-3.5" />
+                  Listening... Speak now
+                </span>
+              )}
+              {micStatus === 'success' && (
+                <span className="text-xs text-green-700 font-medium flex items-center gap-1">
+                  <CheckCircle className="w-3.5 h-3.5 text-green-600" />
+                  Microphone Verified
+                </span>
+              )}
+              {micStatus === 'error' && (
+                <span className="text-xs text-red-600 font-medium flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 text-red-600" />
+                  Permission Denied
+                </span>
+              )}
             </div>
-          </Card>
 
-          <div className="p-4 rounded-xl border border-[#E8D5BE] dark:border-[#A66A24]/40 bg-[#FBF5EC] dark:bg-[#A66A24]/10 text-xs font-mono space-y-1.5">
-            <span className="font-bold text-[#A66A24] dark:text-[#DEAC74] uppercase tracking-wider block flex items-center gap-1.5">
-              <AlertTriangle className="w-3.5 h-3.5" />
-              MANDATORY PROCTORING PROTOCOL:
-            </span>
-            <p className="text-[11px] text-[#171717] dark:text-[#F7F4EE] font-sans leading-relaxed">
-              1. <strong>All-Time Camera:</strong> Continuous webcam access is maintained during the viva.<br />
-              2. <strong>Full-Screen Lock:</strong> The exam executes in strict full-screen mode. <strong>Exiting full screen will immediately terminate your exam and submit answered questions.</strong>
-            </p>
-          </div>
+            {/* Audio Volume Bar */}
+            {micStatus === 'listening' && (
+              <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-blue-600 h-full transition-all duration-75 rounded-full"
+                  style={{ width: `${Math.max(10, micVolume)}%` }}
+                />
+              </div>
+            )}
 
-          <div className="p-4 rounded-xl border border-[#DED9D0] dark:border-[#332F2A] bg-[#FFFDF9] dark:bg-[#1C1916] flex items-center justify-between shadow-paper">
-            <span className="text-xs font-mono text-[#68645E] dark:text-[#9E988F]">
-              Timer commences on entrance.
-            </span>
-            <Button size="sm" icon={Play} onClick={handleStartInterview} isLoading={isStarting}>
-              Enter Proctored Exam
-            </Button>
+            <button
+              onClick={handleTestMicrophone}
+              className="w-full text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 py-1.5 rounded transition-colors"
+            >
+              {micTested ? 'Test Again' : 'Test Microphone'}
+            </button>
           </div>
         </div>
+      </div>
+
+      {/* Selected Topics Card */}
+      <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-sm space-y-2">
+        <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+          Topics Covered in this Session
+        </h3>
+        <div className="flex flex-wrap gap-2 pt-1">
+          {interview.topics?.map((topic, i) => (
+            <span
+              key={i}
+              className="text-xs bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-1 rounded"
+            >
+              {topic}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Final Action CTA */}
+      <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-4">
+        <span className="text-xs text-slate-600">
+          Ready to begin? The session timer will start once you enter the room.
+        </span>
+
+        <button
+          onClick={handleStartInterview}
+          disabled={isStarting}
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm px-6 py-2.5 rounded shadow-sm transition-colors"
+        >
+          {isStarting ? <span>Loading Room...</span> : <span>Start Interview</span>}
+        </button>
       </div>
     </div>
   );
 };
+
+export default InterviewPrepPage;

@@ -14,32 +14,26 @@ export const Badge = ({
   };
 
   const variants = {
-    brand:
-      'bg-[#FAF0F2] text-[#7A263A] dark:bg-[#7A263A]/20 dark:text-[#E8A5B2] border border-[#E8C5CC] dark:border-[#7A263A]/40',
-    brass:
-      'bg-[#FBF6EE] text-[#8C642A] dark:bg-[#C59A5B]/20 dark:text-[#E8CDA0] border border-[#E8D5B8] dark:border-[#C59A5B]/40',
-    success:
-      'bg-[#EFF5F1] text-[#3F6B52] dark:bg-[#3F6B52]/20 dark:text-[#88BA9D] border border-[#C2D9CB] dark:border-[#3F6B52]/40',
-    warning:
-      'bg-[#FBF5EC] text-[#A66A24] dark:bg-[#A66A24]/20 dark:text-[#DEAC74] border border-[#E8D5BE] dark:border-[#A66A24]/40',
-    danger:
-      'bg-[#FAF0F0] text-[#A33B3B] dark:bg-[#A33B3B]/20 dark:text-[#E59797] border border-[#E8C4C4] dark:border-[#A33B3B]/40',
-    neutral:
-      'bg-[#F0ECE4] text-[#68645E] dark:bg-[#24201C] dark:text-[#9E988F] border border-[#DED9D0] dark:border-[#332F2A]',
+    brand: 'bg-blue-50 text-blue-700 border border-blue-200',
+    brass: 'bg-amber-50 text-amber-700 border border-amber-200',
+    success: 'bg-green-50 text-green-700 border border-green-200',
+    warning: 'bg-amber-50 text-amber-700 border border-amber-200',
+    danger: 'bg-red-50 text-red-700 border border-red-200',
+    neutral: 'bg-slate-100 text-slate-700 border border-slate-200',
   };
 
   const dotColors = {
-    brand: 'bg-[#7A263A]',
-    brass: 'bg-[#C59A5B]',
-    success: 'bg-[#3F6B52]',
-    warning: 'bg-[#A66A24]',
-    danger: 'bg-[#A33B3B]',
-    neutral: 'bg-[#948F87]',
+    brand: 'bg-blue-600',
+    brass: 'bg-amber-600',
+    success: 'bg-green-600',
+    warning: 'bg-amber-600',
+    danger: 'bg-red-600',
+    neutral: 'bg-slate-500',
   };
 
   return (
     <span
-      className={`inline-flex items-center font-mono font-medium rounded-md tracking-tight ${sizes[size]} ${variants[variant] || variants.brand} ${className}`}
+      className={`inline-flex items-center font-medium rounded ${sizes[size]} ${variants[variant] || variants.brand} ${className}`}
     >
       {dot && (
         <span
@@ -50,3 +44,5 @@ export const Badge = ({
     </span>
   );
 };
+
+export default Badge;

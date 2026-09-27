@@ -1,17 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
-  History, 
   Calendar, 
   ChevronRight, 
   AlertCircle,
   Plus,
-  BookOpen
+  BookOpen,
+  FileText
 } from 'lucide-react';
-import { Button } from '../components/ui/Button';
-import { Card } from '../components/ui/Card';
-import { Badge } from '../components/ui/Badge';
-import { Spinner } from '../components/ui/Spinner';
 import api from '../services/api';
 
 export const HistoryPage = () => {
@@ -33,105 +29,104 @@ export const HistoryPage = () => {
 
   if (loading) {
     return (
-      <div className="min-h-[70vh] flex items-center justify-center">
-        <Spinner size="lg" label="Retrieving Examination Archives..." />
+      <div className="min-h-[70vh] flex flex-col items-center justify-center space-y-3">
+        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-slate-600">Loading interview records...</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6 animate-fade-in font-sans">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-[#DED9D0] dark:border-[#332F2A]">
+    <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+      <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-[#68645E] dark:text-[#9E988F]">
-            ARCHIVAL RECORDS
-          </span>
-          <h1 className="text-2xl sm:text-3xl font-serif font-bold text-[#171717] dark:text-[#F7F4EE] tracking-tight">
-            Assessment History & Transcripts
-          </h1>
-          <p className="text-xs text-[#68645E] dark:text-[#9E988F] mt-0.5 font-mono">
-            VERIFIED LONGITUDINAL LOG OF SESSIONS & RUBRIC OUTCOMES
-          </p>
+          <h1 className="text-2xl font-bold text-slate-900">Interview History</h1>
+          <p className="text-xs text-slate-500 mt-1">Review your past practice sessions and feedback reports</p>
         </div>
-        <Link to="/interviews/new">
-          <Button icon={Plus} size="md">
-            New Assessment
-          </Button>
+
+        <Link
+          to="/interviews/new"
+          className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs px-4 py-2 rounded shadow-sm transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          <span>New Interview</span>
         </Link>
       </div>
 
       {error && (
-        <div className="p-3 rounded-lg bg-[#FAF0F0] dark:bg-[#A33B3B]/20 border border-[#E8C4C4] dark:border-[#A33B3B]/40 flex items-center gap-2 text-xs text-[#A33B3B] dark:text-[#E59797] font-mono">
+        <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {interviews.length === 0 ? (
-        <Card className="p-10 text-center max-w-md mx-auto shadow-paper">
-          <div className="w-10 h-10 rounded-lg bg-[#F0ECE4] dark:bg-[#24201C] text-[#68645E] dark:text-[#9E988F] flex items-center justify-center mx-auto mb-3 border border-[#DED9D0] dark:border-[#332F2A]">
-            <History className="w-5 h-5 text-[#7A263A] dark:text-[#D4AA6A]" />
-          </div>
-          <h2 className="text-sm font-serif font-bold text-[#171717] dark:text-[#F7F4EE] mb-1">No Past Assessments Recorded</h2>
-          <p className="text-xs text-[#68645E] dark:text-[#9E988F] mb-5">
-            Complete your first mock interview to establish your historical performance profile.
+        <div className="bg-white border border-slate-200 rounded-lg p-10 text-center space-y-3 shadow-sm">
+          <BookOpen className="w-10 h-10 text-slate-400 mx-auto" />
+          <h2 className="text-base font-bold text-slate-900">No Interview Sessions Yet</h2>
+          <p className="text-xs text-slate-500 max-w-sm mx-auto">
+            You haven't completed any mock interviews. Start a session now to practice speaking your technical answers.
           </p>
-          <Link to="/interviews/new">
-            <Button size="sm" icon={Plus}>Start First Assessment</Button>
+          <Link
+            to="/interviews/new"
+            className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs px-4 py-2 rounded transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Start an Interview</span>
           </Link>
-        </Card>
+        </div>
       ) : (
         <div className="space-y-3">
           {interviews.map((item) => {
             const isCompleted = item.status === 'completed';
-            const score = item.overallScore || 0;
+            const score10 = item.overallScore !== null ? Math.round(item.overallScore / 10) : null;
 
             return (
-              <Card key={item._id} hover className="p-4 sm:p-5 shadow-paper">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2 font-mono">
-                      <Badge variant={isCompleted ? 'success' : 'neutral'} size="sm" dot>
-                        {item.status.replace('_', ' ').toUpperCase()}
-                      </Badge>
-                      <Badge variant="brand" size="sm">{item.difficulty?.toUpperCase()}</Badge>
-                      <span className="text-[11px] text-[#68645E] dark:text-[#9E988F] flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        {new Date(item.createdAt).toLocaleDateString(undefined, {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric'
-                        })}
-                      </span>
-                    </div>
-
-                    <h3 className="text-sm sm:text-base font-serif font-bold text-[#171717] dark:text-[#F7F4EE]">
-                      {item.title}
-                    </h3>
-
-                    <p className="text-xs text-[#68645E] dark:text-[#9E988F] font-mono">
-                      Role: {item.targetRole} • Topics: {item.topics?.join(', ')} • {item.questions?.length} Questions
-                    </p>
+              <div
+                key={item._id}
+                className="bg-white border border-slate-200 rounded-lg p-5 shadow-sm hover:border-slate-300 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
+                      isCompleted
+                        ? 'bg-green-50 text-green-700 border border-green-200'
+                        : 'bg-amber-50 text-amber-700 border border-amber-200'
+                    }`}>
+                      {isCompleted ? 'Completed' : 'In Progress'}
+                    </span>
+                    <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium">
+                      {item.difficulty}
+                    </span>
+                    <span className="text-xs text-slate-400 flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {new Date(item.createdAt).toLocaleDateString()}
+                    </span>
                   </div>
 
-                  <div className="flex items-center gap-4 shrink-0 justify-between sm:justify-end border-t sm:border-t-0 pt-2.5 sm:pt-0 border-[#DED9D0] dark:border-[#332F2A]">
-                    {isCompleted && (
-                      <div className="text-right font-mono">
-                        <span className="text-[10px] text-[#68645E] dark:text-[#9E988F] block uppercase">Rubric Score</span>
-                        <span className="text-lg font-bold text-[#7A263A] dark:text-[#D4AA6A]">
-                          {score}%
-                        </span>
-                      </div>
-                    )}
-
-                    <Link to={isCompleted ? `/interviews/${item._id}/results` : `/interviews/${item._id}/prep`}>
-                      <Button variant={isCompleted ? 'outline' : 'primary'} size="sm" icon={ChevronRight}>
-                        {isCompleted ? 'View Dossier' : 'Resume'}
-                      </Button>
-                    </Link>
-                  </div>
+                  <h3 className="text-base font-semibold text-slate-900">{item.title}</h3>
+                  <p className="text-xs text-slate-500">
+                    {item.targetRole} • {item.topics?.join(', ')}
+                  </p>
                 </div>
-              </Card>
+
+                <div className="flex items-center gap-4 shrink-0">
+                  <div className="text-right">
+                    <span className="text-[11px] text-slate-400 block">Score</span>
+                    <span className="text-lg font-bold text-blue-600">
+                      {score10 !== null ? `${score10}/10` : '—'}
+                    </span>
+                  </div>
+
+                  <Link
+                    to={`/interviews/${item._id}/results`}
+                    className="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium px-3 py-2 rounded transition-colors"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>View Report</span>
+                  </Link>
+                </div>
+              </div>
             );
           })}
         </div>

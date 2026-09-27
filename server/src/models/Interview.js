@@ -64,6 +64,12 @@ const interviewSchema = new mongoose.Schema(
       max: 100,
       default: null,
     },
+    scoreOutOf10: {
+      type: Number,
+      min: 0,
+      max: 10,
+      default: null,
+    },
     questions: [
       {
         type: mongoose.Schema.Types.ObjectId,

@@ -6,13 +6,11 @@ import {
   Check, 
   AlertCircle,
   BookOpen,
-  Scale,
-  Award
+  Briefcase,
+  Sliders,
+  CheckSquare
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { Button } from '../components/ui/Button';
-import { Card } from '../components/ui/Card';
-import { Badge } from '../components/ui/Badge';
 import api from '../services/api';
 
 export const CreateInterviewPage = () => {
@@ -34,7 +32,7 @@ export const CreateInterviewPage = () => {
 
   const roles = [
     { title: 'Software Development Engineer', desc: 'Core DSA, System Design, OS, and Architecture' },
-    { title: 'Frontend Developer', desc: 'React, JavaScript/TypeScript, Web Performance, CSS' },
+    { title: 'Frontend Developer', desc: 'React, JavaScript, Web Performance, CSS' },
     { title: 'Backend Developer', desc: 'Node.js, Databases, APIs, Distributed Systems' },
     { title: 'Full Stack Developer', desc: 'End-to-End MERN/Web, Database Modeling, REST' },
     { title: 'Data Analyst', desc: 'SQL, Python Data Manipulation, Metrics, Insights' },
@@ -90,286 +88,233 @@ export const CreateInterviewPage = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8 animate-fade-in">
-      {/* Wizard Header & Progress Steps */}
-      <div className="text-center max-w-2xl mx-auto">
-        <span className="font-mono text-xs text-[#7A263A] dark:text-[#D4AA6A] uppercase tracking-wider font-semibold">
-          EVALUATION PROTOCOL
-        </span>
-        <h1 className="text-2xl sm:text-3xl font-serif font-bold text-[#171717] dark:text-[#F7F4EE] tracking-tight mt-1">
-          Configure Examination Session
+    <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+      {/* Wizard Header */}
+      <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm space-y-3">
+        <h1 className="text-2xl font-bold text-slate-900">
+          Create New Mock Interview
         </h1>
-        <p className="font-mono text-xs text-[#68645E] dark:text-[#9E988F] mt-1.5">
-          STEP {step} OF 4: {step === 1 ? 'PLACEMENT TRACK' : step === 2 ? 'TECHNICAL SYLLABUS' : step === 3 ? 'EVALUATION RIGOR' : 'DURATION & CONFIRMATION'}
+        <p className="text-xs text-slate-500">
+          Step {step} of 3: {step === 1 ? 'Choose Job Role' : step === 2 ? 'Select Technical Topics' : 'Difficulty & Questions'}
         </p>
 
-        {/* Step Progress Indicators */}
-        <div className="flex items-center justify-center gap-2 mt-5">
-          {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className={`h-1.5 rounded-full transition-all duration-200 ${
-                i === step
-                  ? 'w-10 bg-[#7A263A]'
-                  : i < step
-                  ? 'w-6 bg-[#3F6B52]'
-                  : 'w-6 bg-[#DED9D0] dark:bg-[#332F2A]'
-              }`}
-            />
-          ))}
+        {/* Step Progress Bar */}
+        <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+          <div
+            className="bg-blue-600 h-full transition-all duration-200 rounded-full"
+            style={{ width: `${(step / 3) * 100}%` }}
+          />
         </div>
       </div>
 
       {error && (
-        <div className="p-3.5 rounded-[10px] bg-[#FAF0F0] dark:bg-[#A33B3B]/15 border border-[#E8C4C4] dark:border-[#A33B3B]/40 flex items-center gap-2.5 text-xs text-[#A33B3B] dark:text-[#E59797]">
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
-      {/* STEP 1: Target Role */}
+      {/* STEP 1: Choose Target Role */}
       {step === 1 && (
-        <div className="space-y-5 animate-slide-up">
-          <div className="flex items-center justify-between pb-2 border-b border-[#DED9D0] dark:border-[#332F2A]">
-            <h2 className="text-sm font-mono font-semibold text-[#171717] dark:text-[#F7F4EE] uppercase tracking-wider">
-              1. Select Placement Track
-            </h2>
-            <span className="text-xs text-[#68645E] dark:text-[#9E988F] font-mono">6 ROLES AVAILABLE</span>
-          </div>
+        <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm space-y-4">
+          <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+            <Briefcase className="w-4 h-4 text-blue-600" />
+            Select Your Target Job Role
+          </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {roles.map((r) => {
               const isSelected = targetRole === r.title;
               return (
                 <div
                   key={r.title}
                   onClick={() => setTargetRole(r.title)}
-                  className={`p-4 rounded-xl cursor-pointer border transition-all ${
+                  className={`p-4 rounded-lg cursor-pointer border transition-all ${
                     isSelected
-                      ? 'bg-[#FAF0F2] dark:bg-[#7A263A]/20 border-[#7A263A] dark:border-[#7A263A]/60 shadow-sm'
-                      : 'bg-[#FFFDF9] dark:bg-[#1C1916] border-[#DED9D0] dark:border-[#332F2A] hover:border-[#C59A5B]/60'
+                      ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500 shadow-sm'
+                      : 'bg-white border-slate-200 hover:border-slate-300'
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <h3 className="font-serif font-bold text-[#171717] dark:text-[#F7F4EE] text-sm">{r.title}</h3>
-                    {isSelected && <span className="w-2 h-2 rounded-full bg-[#7A263A]" />}
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="font-semibold text-slate-900 text-sm">{r.title}</h3>
+                    {isSelected && <span className="w-2 h-2 rounded-full bg-blue-600" />}
                   </div>
-                  <p className="text-xs text-[#68645E] dark:text-[#9E988F] leading-relaxed">{r.desc}</p>
+                  <p className="text-xs text-slate-500">{r.desc}</p>
                 </div>
               );
             })}
           </div>
 
           <div className="flex justify-end pt-3">
-            <Button size="md" icon={ArrowRight} onClick={() => setStep(2)}>
-              Next: Select Syllabus
-            </Button>
+            <button
+              onClick={() => setStep(2)}
+              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs px-5 py-2.5 rounded shadow-sm transition-colors"
+            >
+              <span>Next: Choose Topics</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}
 
-      {/* STEP 2: Technical Topics */}
+      {/* STEP 2: Choose Technical Topics */}
       {step === 2 && (
-        <div className="space-y-5 animate-slide-up">
-          <div className="flex items-center justify-between pb-2 border-b border-[#DED9D0] dark:border-[#332F2A]">
-            <div>
-              <h2 className="text-sm font-mono font-semibold text-[#171717] dark:text-[#F7F4EE] uppercase tracking-wider">
-                2. Choose Technical Syllabus
-              </h2>
-              <p className="text-xs text-[#68645E] dark:text-[#9E988F] mt-0.5">
-                Questions will be synthesized across selected areas ({selectedTopics.length} selected).
-              </p>
-            </div>
+        <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-blue-600" />
+              Select Technical Topics ({selectedTopics.length} selected)
+            </h2>
+            <span className="text-xs text-slate-400">At least 1 required</span>
           </div>
 
-          <div className="flex flex-wrap gap-2.5 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {topicsList.map((topic) => {
               const isSelected = selectedTopics.includes(topic);
               return (
-                <button
-                  key={topic}
-                  type="button"
-                  onClick={() => handleTopicToggle(topic)}
-                  className={`px-3.5 py-2 rounded-[8px] font-mono text-xs font-medium transition-all border ${
-                    isSelected
-                      ? 'bg-[#7A263A] text-white border-[#7A263A] shadow-sm'
-                      : 'bg-[#FFFDF9] dark:bg-[#1C1916] text-[#171717] dark:text-[#F7F4EE] border-[#DED9D0] dark:border-[#332F2A] hover:bg-[#F0ECE4] dark:hover:bg-[#24201C]'
-                  }`}
-                >
-                  {isSelected ? '✓ ' : '+ '}
-                  {topic}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flex items-center justify-between pt-4">
-            <Button variant="secondary" size="md" icon={ArrowLeft} onClick={() => setStep(1)}>
-              Back
-            </Button>
-            <Button size="md" icon={ArrowRight} onClick={() => setStep(3)}>
-              Next: Rigor & Format
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* STEP 3: Difficulty & Format */}
-      {step === 3 && (
-        <div className="space-y-5 animate-slide-up">
-          <div className="flex items-center justify-between pb-2 border-b border-[#DED9D0] dark:border-[#332F2A]">
-            <h2 className="text-sm font-mono font-semibold text-[#171717] dark:text-[#F7F4EE] uppercase tracking-wider">
-              3. Evaluation Rigor & Format
-            </h2>
-            <span className="text-xs text-[#68645E] dark:text-[#9E988F] font-mono">STANDARDIZED TIERS</span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-            {[
-              { val: 'Easy', label: 'Easy Tier', desc: 'Definitions, core foundations, standard algorithms' },
-              { val: 'Medium', label: 'Medium Tier', desc: 'Standard campus placement bar with trade-offs' },
-              { val: 'Hard', label: 'Hard Tier', desc: 'Concurrency, scale bottlenecks, system failure modes' },
-            ].map((d) => {
-              const isSelected = difficulty === d.val;
-              return (
                 <div
-                  key={d.val}
-                  onClick={() => setDifficulty(d.val)}
-                  className={`p-4 rounded-xl cursor-pointer border transition-all ${
+                  key={topic}
+                  onClick={() => handleTopicToggle(topic)}
+                  className={`p-3 rounded-lg border text-xs font-medium cursor-pointer flex items-center justify-between transition-colors ${
                     isSelected
-                      ? 'bg-[#FAF0F2] dark:bg-[#7A263A]/20 border-[#7A263A] dark:border-[#7A263A]/60 shadow-sm'
-                      : 'bg-[#FFFDF9] dark:bg-[#1C1916] border-[#DED9D0] dark:border-[#332F2A] hover:border-[#C59A5B]/60'
+                      ? 'bg-blue-50 border-blue-500 text-blue-900'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
-                  <div className="flex justify-between items-center mb-1.5">
-                    <span className="font-serif font-bold text-[#171717] dark:text-[#F7F4EE] text-sm">{d.label}</span>
-                    {isSelected && <span className="w-2 h-2 rounded-full bg-[#7A263A]" />}
+                  <span>{topic}</span>
+                  <div className={`w-4 h-4 rounded flex items-center justify-center border ${
+                    isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'
+                  }`}>
+                    {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
                   </div>
-                  <p className="text-xs text-[#68645E] dark:text-[#9E988F] leading-relaxed">{d.desc}</p>
                 </div>
               );
             })}
           </div>
 
-          <div className="pt-2">
-            <label className="block text-xs font-mono font-medium text-[#171717] dark:text-[#F7F4EE] uppercase tracking-wider mb-2">
-              Interview Modality
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              {['Technical', 'HR', 'Behavioral', 'Mixed'].map((type) => (
+          <div className="flex items-center justify-between pt-3">
+            <button
+              onClick={() => setStep(1)}
+              className="inline-flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900 font-medium py-2 px-3 rounded hover:bg-slate-100 transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back</span>
+            </button>
+
+            <button
+              onClick={() => setStep(3)}
+              disabled={selectedTopics.length === 0}
+              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-medium text-xs px-5 py-2.5 rounded shadow-sm transition-colors"
+            >
+              <span>Next: Difficulty & Count</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 3: Difficulty, Question Count & Duration */}
+      {step === 3 && (
+        <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm space-y-6">
+          <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+            <Sliders className="w-4 h-4 text-blue-600" />
+            Interview Settings
+          </h2>
+
+          {/* Difficulty Selector */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-700 block">Difficulty Level:</label>
+            <div className="grid grid-cols-3 gap-3">
+              {['Easy', 'Medium', 'Hard'].map((diff) => (
                 <button
-                  key={type}
+                  key={diff}
                   type="button"
-                  onClick={() => setInterviewType(type)}
-                  className={`py-2 px-3 rounded-[8px] font-mono text-xs font-semibold border transition-colors ${
-                    interviewType === type
-                      ? 'bg-[#7A263A] text-white border-[#7A263A] shadow-sm'
-                      : 'bg-[#FFFDF9] dark:bg-[#1C1916] text-[#171717] dark:text-[#F7F4EE] border-[#DED9D0] dark:border-[#332F2A] hover:bg-[#F0ECE4] dark:hover:bg-[#24201C]'
+                  onClick={() => setDifficulty(diff)}
+                  className={`py-2.5 px-3 rounded-lg border text-xs font-medium transition-all ${
+                    difficulty === diff
+                      ? 'bg-blue-50 border-blue-500 text-blue-700 font-semibold'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
-                  {type}
+                  {diff}
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-4">
-            <Button variant="secondary" size="md" icon={ArrowLeft} onClick={() => setStep(2)}>
-              Back
-            </Button>
-            <Button size="md" icon={ArrowRight} onClick={() => setStep(4)}>
-              Next: Review & Generate
-            </Button>
+          {/* Question Count & Duration */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label htmlFor="question-count" className="text-xs font-semibold text-slate-700 block">
+                Number of Questions:
+              </label>
+              <select
+                id="question-count"
+                value={questionCount}
+                onChange={(e) => setQuestionCount(parseInt(e.target.value, 10))}
+                className="w-full p-2.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value={3}>3 Questions (Quick Practice)</option>
+                <option value={5}>5 Questions (Standard Round)</option>
+                <option value={7}>7 Questions (Comprehensive Viva)</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="duration-select" className="text-xs font-semibold text-slate-700 block">
+                Total Time Limit:
+              </label>
+              <select
+                id="duration-select"
+                value={durationMinutes}
+                onChange={(e) => setDurationMinutes(parseInt(e.target.value, 10))}
+                className="w-full p-2.5 border border-slate-300 rounded-lg text-xs bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value={15}>15 Minutes</option>
+                <option value={20}>20 Minutes</option>
+                <option value={30}>30 Minutes</option>
+              </select>
+            </div>
           </div>
-        </div>
-      )}
 
-      {/* STEP 4: Duration & Review */}
-      {step === 4 && (
-        <div className="space-y-5 animate-slide-up">
-          <Card className="p-6 space-y-5">
-            <h2 className="text-base font-serif font-bold text-[#171717] dark:text-[#F7F4EE] pb-2 border-b border-[#DED9D0] dark:border-[#332F2A]">
-              Session Parameters & Duration
-            </h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-mono font-medium text-[#171717] dark:text-[#F7F4EE] uppercase tracking-wider mb-2">
-                  Question Count: <span className="text-[#7A263A] dark:text-[#D4AA6A] font-bold">{questionCount}</span>
-                </label>
-                <div className="flex gap-2 font-mono">
-                  {[3, 5, 8].map((count) => (
-                    <button
-                      key={count}
-                      type="button"
-                      onClick={() => setQuestionCount(count)}
-                      className={`flex-1 py-2 rounded-[8px] text-xs font-semibold border ${
-                        questionCount === count
-                          ? 'bg-[#7A263A] text-white border-[#7A263A]'
-                          : 'bg-[#F0ECE4] dark:bg-[#24201C] text-[#171717] dark:text-[#F7F4EE] border-[#DED9D0] dark:border-[#332F2A]'
-                      }`}
-                    >
-                      {count} Qs
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-mono font-medium text-[#171717] dark:text-[#F7F4EE] uppercase tracking-wider mb-2">
-                  Duration Budget: <span className="text-[#7A263A] dark:text-[#D4AA6A] font-bold">{durationMinutes} mins</span>
-                </label>
-                <div className="flex gap-2 font-mono">
-                  {[15, 20, 30].map((dur) => (
-                    <button
-                      key={dur}
-                      type="button"
-                      onClick={() => setDurationMinutes(dur)}
-                      className={`flex-1 py-2 rounded-[8px] text-xs font-semibold border ${
-                        durationMinutes === dur
-                          ? 'bg-[#7A263A] text-white border-[#7A263A]'
-                          : 'bg-[#F0ECE4] dark:bg-[#24201C] text-[#171717] dark:text-[#F7F4EE] border-[#DED9D0] dark:border-[#332F2A]'
-                      }`}
-                    >
-                      {dur} mins
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Final Configuration Summary */}
-            <div className="p-4 rounded-[10px] bg-[#F0ECE4] dark:bg-[#24201C] border border-[#DED9D0] dark:border-[#332F2A] space-y-2 font-mono text-xs">
-              <span className="font-semibold text-[#171717] dark:text-[#F7F4EE] uppercase tracking-wider block mb-1">
-                SESSION TELEMETRY MANIFEST:
-              </span>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[#68645E] dark:text-[#9E988F]">
-                <div>Track: <strong className="text-[#171717] dark:text-[#F7F4EE]">{targetRole}</strong></div>
-                <div>Rigor: <strong className="text-[#171717] dark:text-[#F7F4EE]">{difficulty}</strong></div>
-                <div>Format: <strong className="text-[#171717] dark:text-[#F7F4EE]">{interviewType}</strong></div>
-                <div>Questions: <strong className="text-[#171717] dark:text-[#F7F4EE]">{questionCount} Qs</strong></div>
-              </div>
-              <div className="pt-2 text-[#68645E] dark:text-[#9E988F] border-t border-[#DED9D0]/70 dark:border-[#332F2A]/70">
-                Syllabus: {selectedTopics.join(', ')}
-              </div>
-            </div>
-          </Card>
+          {/* Summary Box */}
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 space-y-1">
+            <p><strong>Track:</strong> {targetRole}</p>
+            <p><strong>Topics:</strong> {selectedTopics.join(', ')}</p>
+            <p><strong>Configuration:</strong> {difficulty} Level • {questionCount} Questions • {durationMinutes} Minutes</p>
+          </div>
 
           <div className="flex items-center justify-between pt-2">
-            <Button variant="secondary" size="md" icon={ArrowLeft} onClick={() => setStep(3)} disabled={isGenerating}>
-              Back
-            </Button>
-            <Button
-              size="md"
-              icon={Award}
-              isLoading={isGenerating}
-              onClick={handleGenerate}
+            <button
+              onClick={() => setStep(2)}
+              className="inline-flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900 font-medium py-2 px-3 rounded hover:bg-slate-100 transition-colors"
             >
-              {isGenerating ? 'Synthesizing Questions...' : 'Initialize Interview Session'}
-            </Button>
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back</span>
+            </button>
+
+            <button
+              onClick={handleGenerate}
+              disabled={isGenerating}
+              className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-slate-300 text-white font-medium text-xs px-6 py-2.5 rounded shadow-sm transition-colors"
+            >
+              {isGenerating ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Generating Questions...</span>
+                </>
+              ) : (
+                <>
+                  <span>Generate Interview</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
           </div>
         </div>
       )}
     </div>
   );
 };
+
+export default CreateInterviewPage;
